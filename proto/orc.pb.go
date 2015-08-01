@@ -34,7 +34,7 @@ It has these top-level messages:
 	PostScript
 	FileTail
 */
-package orc
+package orc_proto
 
 import proto "github.com/golang/protobuf/proto"
 import math "math"

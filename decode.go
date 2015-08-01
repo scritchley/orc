@@ -7,6 +7,8 @@ import (
 	"io/ioutil"
 
 	"github.com/gogo/protobuf/proto"
+
+	"code.simon-critchley.co.uk/orc/proto"
 )
 
 const (
@@ -26,9 +28,9 @@ type Decoder struct {
 	bufferSize       uint64
 	postScriptLength int64
 	r                ORCReader
-	PostScript       PostScript
-	Footer           Footer
-	Metadata         Metadata
+	PostScript       orc_proto.PostScript
+	Footer           orc_proto.Footer
+	Metadata         orc_proto.Metadata
 	tail             []byte
 }
 
@@ -85,18 +87,18 @@ func (d *Decoder) useCompression() error {
 	compressionKind := d.PostScript.GetCompression()
 
 	switch compressionKind {
-	case CompressionKind_ZLIB:
+	case orc_proto.CompressionKind_ZLIB:
 		// Use the zlibDecoder
 		d.dec = zlibDecoder
-	case CompressionKind_SNAPPY:
+	case orc_proto.CompressionKind_SNAPPY:
 		// Use the snappyDecoder
 		return fmt.Errorf("Unsupported compression type: %s", compressionKind.String())
 		// d.dec = snappyDecoder
-	case CompressionKind_LZO:
+	case orc_proto.CompressionKind_LZO:
 		// Use the snappyDecoder
 		return fmt.Errorf("Unsupported compression type: %s", compressionKind.String())
 		// d.dec = lzoDecoder
-	case CompressionKind_NONE:
+	case orc_proto.CompressionKind_NONE:
 		// No compression by default
 		d.dec = func(r io.Reader) (io.Reader, error) {
 			return r, nil
@@ -206,7 +208,7 @@ func (d *Decoder) Cursor() error {
 			return err
 		}
 
-		var stripeFooter StripeFooter
+		var stripeFooter orc_proto.StripeFooter
 
 		err = proto.Unmarshal(stripeFooterBuf, &stripeFooter)
 		if err != nil {
@@ -240,7 +242,7 @@ func (d *Decoder) Cursor() error {
 
 			fmt.Println(streamKind, colIndex, colEncodingKind, colType)
 
-			if streamKind == Stream_DATA && colType == Type_INT {
+			if streamKind == orc_proto.Stream_DATA && colType == orc_proto.Type_INT {
 
 				r := NewIntStreamReader(bytes.NewReader(streamBuf), true)
 
@@ -253,7 +255,7 @@ func (d *Decoder) Cursor() error {
 
 			}
 
-			if streamKind == Stream_DATA && colType == Type_STRING && colEncodingKind == ColumnEncoding_DICTIONARY_V2 {
+			if streamKind == orc_proto.Stream_DATA && colType == orc_proto.Type_STRING && colEncodingKind == orc_proto.ColumnEncoding_DICTIONARY_V2 {
 
 				r := NewIntStreamReader(bytes.NewReader(streamBuf), true)
 
