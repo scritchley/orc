@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -29,4 +30,15 @@ func TestBooleanStreamReader(t *testing.T) {
 		t.Errorf("Test failed, expected %v to equal %v", output, expected)
 	}
 
+}
+
+func BenchmarkBooleanStreamReader(b *testing.B) {
+	input := []byte(strings.Repeat(string([]byte{0xff, 0x80}), 10<<16))
+	bs := NewBooleanStreamReader(bytes.NewReader(input))
+	for i := 0; i < b.N; i++ {
+		if !bs.Next() {
+			break
+		}
+		bs.Bool()
+	}
 }

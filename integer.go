@@ -70,6 +70,14 @@ func (i *IntStreamReader) Int() (int64, bool) {
 	return 0, false
 }
 
+func (i *IntStreamReader) Value() interface{} {
+	v, ok := i.Int()
+	if !ok {
+		return nil
+	}
+	return v
+}
+
 // zigzagEncode encodes a signed integer using zig-zag encoding returning an unsigned integer
 func zigzagEncode(i int) uint {
 	return uint((i << 1) ^ (i >> 31))
@@ -87,7 +95,7 @@ func readIntValues(r io.ByteReader, signed bool) ([]int64, error) {
 		return nil, err
 	}
 	// Get the encoding type
-	enc := RLEV2IntEncodingType((uint(b0) >> 6) & 0x03)
+	enc := RLEEncodingType((uint(b0) >> 6) & 0x03)
 	// Use the relevant read method based on encoding
 	switch enc {
 	case RLEV2IntShortRepeat:
@@ -123,7 +131,7 @@ func readBigEndian(r io.ByteReader, n int) (int64, error) {
 // byte and an io.ByteReader as arguments. It returns a slice of integers and any error that occurs.
 func readIntShortRepeat(b byte, r io.ByteReader, signed bool) ([]int64, error) {
 	// Width of the value in bytes
-	w := ((uint64(b) >> 3) & 0x0b0111) + 1
+	w := ((uint64(b) >> 3) & 0x07) + 1
 	// Run-length
 	rl := b & 0x07
 	// Run-lengths are stored only after MinRepeat is met
@@ -454,6 +462,7 @@ func getClosestFixedBits(width int) int {
 	}
 }
 
+// readVint reads a variable width integer from ByteReader r.
 func readVInt(signed bool, r io.ByteReader) (int64, error) {
 	if signed {
 		return readSignedVInt(r)
@@ -461,6 +470,7 @@ func readVInt(signed bool, r io.ByteReader) (int64, error) {
 	return readUnsignedVInt(r)
 }
 
+// readerSignedVInt reads a signed variable width integer from ByteReader r.
 func readSignedVInt(r io.ByteReader) (int64, error) {
 	result, err := readUnsignedVInt(r)
 	if err != nil {
@@ -469,6 +479,7 @@ func readSignedVInt(r io.ByteReader) (int64, error) {
 	return int64((uint(result) >> uint(1)) ^ -(uint(result) & uint(1))), nil
 }
 
+// readerUnsignedVInt reads an unsigned variable width integer from ByteReader r.
 func readUnsignedVInt(r io.ByteReader) (int64, error) {
 	var result int64
 	var offset int

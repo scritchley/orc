@@ -2,10 +2,11 @@ package orc
 
 import "io"
 
+// ByteStreamReader reads a byte run length encoded stream from ByteReader r.
 type ByteStreamReader struct {
-	r   io.ByteReader
-	buf []byte
-	err error
+	r    io.ByteReader
+	data []byte
+	err  error
 }
 
 func NewByteStreamReader(r io.ByteReader) *ByteStreamReader {
@@ -15,29 +16,32 @@ func NewByteStreamReader(r io.ByteReader) *ByteStreamReader {
 }
 
 func (b *ByteStreamReader) Next() bool {
-	if len(b.buf) == 0 {
+	if len(b.data) == 0 {
 		nb, err := readBytes(b.r)
 		if err != nil {
 			b.err = err
 			return false
 		}
-		b.buf = nb
+		b.data = nb
 	}
 	return true
 }
 
-func (b *ByteStreamReader) Byte() (byte, bool) {
-	l := len(b.buf)
-	if l > 0 {
-		r := b.buf[0]
-		if l == 1 {
-			b.buf = nil
-		} else {
-			b.buf = b.buf[1:]
-		}
-		return r, true
+func (b *ByteStreamReader) Bytes() ([]byte, bool) {
+	if len(b.data) > 0 {
+		literals := b.data
+		b.data = nil
+		return literals, true
 	}
-	return 0x00, false
+	return nil, false
+}
+
+func (b *ByteStreamReader) Value() interface{} {
+	v, ok := b.Bytes()
+	if !ok {
+		return nil
+	}
+	return v
 }
 
 func (b *ByteStreamReader) Error() error {
