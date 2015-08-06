@@ -15,7 +15,6 @@ type StreamReader interface {
 
 func getReader(r io.ByteReader, t orc_proto.Type, c orc_proto.ColumnEncoding, s orc_proto.Stream) (StreamReader, error) {
 	switch t.GetKind() {
-
 	case orc_proto.Type_BOOLEAN:
 		return getBooleanReader(r, c, s)
 	case orc_proto.Type_BYTE:

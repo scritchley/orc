@@ -88,6 +88,8 @@ func zigzagDecode(i uint) int {
 	return int((i >> 1) ^ (-(i & 1)))
 }
 
+// readIntValues reads a run length encoded set of integers using the correct encoding method
+// and returns them as a slice of int64 values along with any error that occurs.
 func readIntValues(r io.ByteReader, signed bool) ([]int64, error) {
 	// Header byte
 	b0, err := r.ReadByte()
@@ -226,6 +228,8 @@ func readIntDelta(b byte, r io.ByteReader, signed bool) ([]int64, error) {
 
 }
 
+// readIntDirect reads a direct encoded set of integer values from ByteReader r and returns
+// them as a slice of int64 values along with any erorr that occurs.
 func readIntDirect(b byte, r io.ByteReader, signed bool) ([]int64, error) {
 	// extract the number of fixed bits
 	fixedBits := decodeBitWidth((int(b) >> 1) & 0x1F)
@@ -255,6 +259,8 @@ func readIntDirect(b byte, r io.ByteReader, signed bool) ([]int64, error) {
 	return literals, nil
 }
 
+// readIntPatchedBase reads a patched base encoded set of integer values from ByteReader
+// r and returns them as a slice of int64 values along with any error that occurs.
 func readIntPatchedBase(b byte, r io.ByteReader) ([]int64, error) {
 	// extract the number of fixed bits
 	fixedBits := decodeBitWidth((int(b) >> 1) & 0x1F)

@@ -32,11 +32,26 @@ type Decoder struct {
 	Footer           orc_proto.Footer
 	Metadata         orc_proto.Metadata
 	tail             []byte
+	columns          map[int]*Column
+}
+
+// getColumn retrieves an existing column or creates a new column at index n
+func (d *Decoder) getColumn(n int) *Column {
+	if col, ok := d.columns[n]; ok {
+		return col
+	}
+	d.columns[n] = &Column{}
+	return d.columns[n]
+}
+
+type Column struct {
+	streams []*orc_proto.Stream
 }
 
 func NewDecoder(r ORCReader) *Decoder {
 	return &Decoder{
-		r: r,
+		r:       r,
+		columns: make(map[int]*Column),
 	}
 }
 
@@ -83,9 +98,8 @@ func (d *Decoder) readPostScript() error {
 }
 
 func (d *Decoder) useCompression() error {
-
+	// The compression kind of the ORC file as specified in the PostScript section
 	compressionKind := d.PostScript.GetCompression()
-
 	switch compressionKind {
 	case orc_proto.CompressionKind_ZLIB:
 		// Use the zlibDecoder
@@ -106,9 +120,7 @@ func (d *Decoder) useCompression() error {
 	default:
 		return fmt.Errorf("Unsupported compression type: %s", compressionKind.String())
 	}
-
 	return nil
-
 }
 
 func (d *Decoder) readTail() error {
@@ -176,15 +188,14 @@ func (d *Decoder) readTail() error {
 
 }
 
+// ReadAll is a helper function that uncompresses and reads all of io.Reader
+// r. It returns a slice of bytes and any error that occurs.
 func (d *Decoder) ReadAll(r io.Reader) ([]byte, error) {
-
 	cr, err := d.dec(r)
 	if err != nil {
 		return nil, err
 	}
-
 	return ioutil.ReadAll(cr)
-
 }
 
 func (d *Decoder) Cursor() error {
@@ -240,7 +251,7 @@ func (d *Decoder) Cursor() error {
 
 			colType := types[colIndex].GetKind()
 
-			fmt.Println(streamKind, colIndex, colEncodingKind, colType)
+			// fmt.Println(streamKind, colIndex, colEncodingKind, colType)
 
 			if streamKind == orc_proto.Stream_DATA && colType == orc_proto.Type_INT {
 

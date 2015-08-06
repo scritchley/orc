@@ -33,12 +33,12 @@ func TestBooleanStreamReader(t *testing.T) {
 }
 
 func BenchmarkBooleanStreamReader(b *testing.B) {
-	input := []byte(strings.Repeat(string([]byte{0xff, 0x80}), 10<<16))
+	input := []byte(strings.Repeat(string([]byte{0xff, 0x80}), b.N))
 	bs := NewBooleanStreamReader(bytes.NewReader(input))
 	for i := 0; i < b.N; i++ {
-		if !bs.Next() {
-			break
+		if bs.Next() {
+			bs.Bool()
 		}
-		bs.Bool()
+		break
 	}
 }

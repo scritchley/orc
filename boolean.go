@@ -51,3 +51,7 @@ func (b *BooleanStreamReader) Bool() bool {
 func (b *BooleanStreamReader) Value() interface{} {
 	return b.Bool()
 }
+
+func (b *BooleanStreamReader) Error() error {
+	return b.ByteStreamReader.Error()
+}
