@@ -3,12 +3,13 @@ package orc
 import (
 	"bufio"
 	"bytes"
-	"compress/flate"
 	"fmt"
 	"io"
+
+	"github.com/golang/snappy"
 )
 
-func zlibDecoder(r io.Reader) (io.Reader, error) {
+func snappyDecoder(r io.Reader) (io.Reader, error) {
 
 	br := bufio.NewReader(r)
 
@@ -34,11 +35,14 @@ func zlibDecoder(r io.Reader) (io.Reader, error) {
 		return nil, fmt.Errorf("read unexpected number of bytes, got %v, expected %v", n, chunkLength)
 	}
 
-	chunkReader := bytes.NewReader(originalChunk)
-
 	if isUncompressed {
-		return chunkReader, nil
+		return bytes.NewReader(originalChunk), nil
 	}
 
-	return flate.NewReader(chunkReader), nil
+	var uncompressedChunk []byte
+
+	uncompressedChunk, err = snappy.Decode(uncompressedChunk, originalChunk)
+
+	return bytes.NewReader(uncompressedChunk), err
+
 }

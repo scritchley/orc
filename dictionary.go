@@ -1,23 +1,36 @@
 package orc
 
-type DictionaryIndex [][]byte
+// import (
+// 	// "fmt"
+// 	"io"
+// )
 
-func NewDictionaryIndex(data []byte, i *IntStreamReader) DictionaryIndex {
-	var dict [][]byte
-	var offset int
-	for i.Next() {
-		length, ok := i.Int()
-		if ok {
-			dict = append(dict, data[offset:offset+int(length)])
-			offset += int(length)
-		}
-	}
-	return dict
-}
+// type DictionaryDataStreamReader struct {
+// 	*IntStreamReader
+// }
 
-func (d DictionaryIndex) Bytes(i int) []byte {
-	if i >= len(d) || i < 0 {
-		return nil
-	}
-	return d[i]
-}
+// func NewDictionaryDataStreamReader(r io.ByteReader) *DictionaryDataStreamReader {
+// 	return &DictionaryDataStreamReader{
+// 		IntStreamReader: NewIntStreamReader(r, false),
+// 	}
+// }
+
+// func (d *DictionaryDataStreamReader) Prepare(i IntStreamReader) error {
+// 	for i.HasNext() {
+// 		l, ok := i.NextInt()
+// 		if !ok {
+// 			return fmt.Errorf("error whilst reading integer stream")
+// 		}
+// 		var b []byte
+// 		for j := 0; j < int(l); j++ {
+
+// 			nb, err := d.r.ReadByte()
+// 			if err != nil {
+// 				return err
+// 			}
+// 			b = append(b, nb)
+// 		}
+// 		d.data = append(d.data, b)
+// 	}
+// 	return nil
+// }
