@@ -77,7 +77,7 @@ func TestWriteReadBools(t *testing.T) {
 	var buf bytes.Buffer
 	w := NewBooleanStreamWriter(&buf)
 	var input []bool
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < 100000; i++ {
 		var b bool
 		if rand.Intn(2) == 1 {
 			b = true

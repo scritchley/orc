@@ -2,43 +2,45 @@ package orc
 
 import (
 	"bufio"
-	"bytes"
 	"compress/flate"
-	"fmt"
 	"io"
 )
 
-func zlibDecoder(r io.Reader) (io.Reader, error) {
+type Codec interface {
+	io.ByteWriter
+	io.Closer
+}
 
-	br := bufio.NewReader(r)
+type ZlibEncoder struct {
+	bw *bufio.Writer
+	zw *flate.Writer
+}
 
-	b0, err := br.ReadByte()
-	b1, err := br.ReadByte()
-	b2, err := br.ReadByte()
+func (z *ZlibEncoder) WriteByte(c byte) error {
+	return z.bw.WriteByte(c)
+}
 
+func (z *ZlibEncoder) Close() error {
+	err := z.bw.Flush()
+	if err != nil {
+		return err
+	}
+	return z.zw.Close()
+}
+
+func NewZlibEncoder(w io.Writer) (*ZlibEncoder, error) {
+	zw, err := flate.NewWriter(w, flate.BestCompression)
 	if err != nil {
 		return nil, err
 	}
+	bw := bufio.NewWriter(w)
 
-	isUncompressed := bool((b0 & 0x01) == 1)
+	return &ZlibEncoder{
+		bw: bw,
+		zw: zw,
+	}, nil
+}
 
-	chunkLength := (int(b2) << 15) | (int(b1) << 7) | int((uint(b0) >> 1))
-
-	originalChunk := make([]byte, chunkLength)
-
-	n, err := br.Read(originalChunk)
-	if err != nil {
-		return nil, err
-	}
-	if n != chunkLength {
-		return nil, fmt.Errorf("read unexpected number of bytes, got %v, expected %v", n, chunkLength)
-	}
-
-	chunkReader := bytes.NewReader(originalChunk)
-
-	if isUncompressed {
-		return chunkReader, nil
-	}
-
-	return flate.NewReader(chunkReader), nil
+func ZlibDecoder(r io.Reader) *bufio.Reader {
+	return bufio.NewReader(flate.NewReader(r))
 }

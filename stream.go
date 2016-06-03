@@ -17,6 +17,10 @@ type StreamReader interface {
 	Error() error
 }
 
+type StreamWriter interface {
+	Write(v interface{}) error
+}
+
 func getReader(r io.ByteReader, t orc_proto.Type_Kind, c orc_proto.ColumnEncoding_Kind, s orc_proto.Stream_Kind) (StreamReader, error) {
 
 	switch s {
