@@ -403,14 +403,12 @@ func (i *RunLengthIntegerWriterV2) determineEncoding() error {
 
 func (i *RunLengthIntegerWriterV2) computeZigZagLiterals() {
 	// populate zigzag encoded literals
-	zzEncVal := int64(0)
 	for j := 0; j < i.numLiterals; j++ {
 		if i.signed {
-			zzEncVal = int64(zigzagEncode(i.literals[j]))
+			i.zigzagLiterals[j] = int64(zigzagEncode(i.literals[j]))
 		} else {
-			zzEncVal = i.literals[j]
+			i.zigzagLiterals[j] = i.literals[j]
 		}
-		i.zigzagLiterals[j] = zzEncVal
 	}
 }
 

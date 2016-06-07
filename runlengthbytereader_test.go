@@ -70,7 +70,8 @@ func BenchmarkRunLengthByteReader(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		if bs.HasNext() {
 			bs.NextByte()
+		} else {
+			break
 		}
-		break
 	}
 }

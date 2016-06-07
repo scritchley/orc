@@ -41,3 +41,7 @@ func (b *BooleanReader) NextBool() bool {
 func (b *BooleanReader) Value() interface{} {
 	return b.NextBool()
 }
+
+func (b *BooleanReader) Err() error {
+	return b.err
+}

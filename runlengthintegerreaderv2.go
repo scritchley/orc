@@ -255,10 +255,8 @@ func (r *RunLengthIntegerReaderV2) readShortRepeatValues(firstByte byte) error {
 func (r *RunLengthIntegerReaderV2) readDirectValues(firstByte byte) error {
 
 	// extract the number of fixed bits
-	fb := (uint64(firstByte) >> 1) & 0x1f
-	if fb != 0 {
-		fb = uint64(decodeBitWidth(int(fb)))
-	}
+	fbo := (uint64(firstByte) >> 1) & 0x1f
+	fb := uint64(decodeBitWidth(int(fbo)))
 
 	// extract the run length
 	l := int((int64(firstByte) & 0x01) << 8)
@@ -415,4 +413,8 @@ func (r *RunLengthIntegerReaderV2) readPatchedBaseValues(firstByte byte) error {
 	}
 
 	return nil
+}
+
+func (r *RunLengthIntegerReaderV2) Err() error {
+	return r.err
 }

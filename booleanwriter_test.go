@@ -70,15 +70,3 @@ func TestWriteReadBools(t *testing.T) {
 		index++
 	}
 }
-
-func BenchmarkBooleanStreamReader(b *testing.B) {
-	input := bytes.Repeat([]byte{0xff, 0x80}, b.N)
-	bs := NewBooleanReader(bytes.NewReader(input))
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if bs.HasNext() {
-			bs.NextBool()
-		}
-		break
-	}
-}

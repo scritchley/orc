@@ -13,6 +13,16 @@ func TestRunLengthIntegerReaderV2(t *testing.T) {
 		expect func([]int64)
 	}{
 		{
+			signed: false,
+			input:  []byte{2, 1, 64, 5, 80, 1, 1},
+			expect: func(output []int64) {
+				expected := []int64{1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 1, 1, 1}
+				if !reflect.DeepEqual(output, expected) {
+					t.Errorf("Test failed, expected %v to equal %v", output, expected)
+				}
+			},
+		},
+		{
 			// Patched Base
 			signed: false,
 			input:  []byte{0x8e, 0x09, 0x2b, 0x21, 0x07, 0xd0, 0x1e, 0x00, 0x14, 0x70, 0x28, 0x32, 0x3c, 0x46, 0x50, 0x5a, 0xfc, 0xe8},
@@ -90,7 +100,6 @@ func TestRunLengthIntegerReaderV2(t *testing.T) {
 
 	for _, tc := range testCases {
 		r := NewRunLengthIntegerReaderV2(bytes.NewReader(tc.input), tc.signed, false)
-		// r := NewIntStreamReaderV2(bytes.NewReader(tc.input), tc.signed)
 		var output []int64
 		for r.HasNext() {
 			v := r.NextInt()

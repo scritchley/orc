@@ -269,7 +269,6 @@ func findClosestNumBits(value int64) int {
 }
 
 func writeInts(input []int64, offset int, l int, bitSize int, w io.ByteWriter) error {
-
 	if input == nil || len(input) < 1 || offset < 0 || l < 1 || bitSize < 1 {
 		return nil
 	}
@@ -364,7 +363,6 @@ func unrolledBitPack1(input []int64, offset int, len int, w io.ByteWriter) error
 		}
 		val = 0
 	}
-
 	if remainder > 0 {
 		startShift := 7
 		for i := endUnroll; i < endOffset; i++ {
@@ -754,7 +752,6 @@ func readVslong(r io.ByteReader) (int64, error) {
 func readInts(buffer []int64, offset, len, bitSize int, r io.ByteReader) error {
 	bitsLeft := 0
 	current := 0
-
 	switch bitSize {
 	case 1:
 		return unrolledUnPack1(buffer, offset, len, r)

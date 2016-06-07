@@ -52,7 +52,7 @@ func TestStringRedBlackTree(t *testing.T) {
 	if v := tree.add("z"); v != 9 {
 		t.Errorf("Test failed, got  %v", v)
 	}
-	// TODO: This test fails but passes in java implementation.
+	// TODO: This test fails but is included in java implementation. 3288 doesn't seem write.
 	// if v := tree.getSizeInBytes(); v != 32888 {
 	// 	t.Errorf("Test failed, got size %v", v)
 	// }

@@ -57,6 +57,17 @@ func TestRunLengthIntegerWriterV2(t *testing.T) {
 				}
 			},
 		},
+		{
+			// Short Repeat
+			signed: false,
+			input:  []int64{1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 1, 1, 1},
+			expect: func(output []byte) {
+				expected := []byte{2, 1, 64, 5, 80, 1, 1}
+				if !reflect.DeepEqual(output, expected) {
+					t.Errorf("Test failed, expected %v to equal %v", output, expected)
+				}
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -76,7 +87,7 @@ func TestRunLengthIntegerWriterV2(t *testing.T) {
 	}
 }
 
-func TestWriteReadInts(t *testing.T) {
+func TestWriteReadRunLengthIntegerWriterV2(t *testing.T) {
 	var buf bytes.Buffer
 	w := NewRunLengthIntegerWriterV2(&buf, true)
 	var input []int64
@@ -98,6 +109,35 @@ func TestWriteReadInts(t *testing.T) {
 		b := r.NextInt()
 		if input[index] != b {
 			t.Errorf("Test failed, %v does not equal %v at index %v", b, input[index], index)
+			break
+		}
+		index++
+	}
+}
+
+func TestWriteReadRunLengthIntegerWriterV2Run(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewRunLengthIntegerWriterV2(&buf, false)
+	var input []int64
+	for i := 0; i < 1000000; i++ {
+		b := rand.Int63n(10)
+		input = append(input, b)
+		err := w.WriteInt(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := w.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := NewRunLengthIntegerReaderV2(&buf, false, false)
+	var index int
+	for r.HasNext() {
+		b := r.NextInt()
+		if input[index] != b {
+			t.Errorf("Test failed, %v does not equal %v at index %v", b, input[index], index)
+			break
 		}
 		index++
 	}

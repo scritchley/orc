@@ -63,7 +63,7 @@ func TestWriteReadBytes(t *testing.T) {
 	w := NewRunLengthByteWriter(&buf)
 	var input []byte
 	for i := 0; i < 10000; i++ {
-		b := uint8(rand.Intn(1))
+		b := uint8(rand.Intn(2))
 		input = append(input, b)
 		err := w.WriteByte(b)
 		if err != nil {

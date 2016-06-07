@@ -21,6 +21,15 @@ func TestBooleanReader(t *testing.T) {
 				}
 			},
 		},
+		{
+			input: []byte{0xff, 0x80},
+			expect: func(output []bool) {
+				expected := []bool{true, false, false, false, false, false, false, false}
+				if !reflect.DeepEqual(expected, output) {
+					t.Errorf("Test failed, expected %v to equal %v", output, expected)
+				}
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -36,4 +45,17 @@ func TestBooleanReader(t *testing.T) {
 		tc.expect(output)
 	}
 
+}
+
+func BenchmarkBooleanReader(b *testing.B) {
+	input := bytes.Repeat([]byte{0xff, 0x80}, b.N)
+	bs := NewBooleanReader(bytes.NewReader(input))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if bs.HasNext() {
+			bs.NextBool()
+		} else {
+			break
+		}
+	}
 }
