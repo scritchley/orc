@@ -224,11 +224,12 @@ func (r *Reader) prepareStripeReader() error {
 		r.columns[i] = column
 	}
 
-	// Iterate through the streams and allocate byte buffers for each.
 	streamOffset := stripeOffset
 	streams := stripeFooter.GetStreams()
 
+	// Iterate through the streams and allocate byte buffers for each.
 	for _, stream := range streams {
+
 		streamLength := int64(stream.GetLength())
 		streamReader := io.NewSectionReader(r.r, streamOffset, streamLength)
 
@@ -250,8 +251,9 @@ func (r *Reader) prepareStripeReader() error {
 			columnID: int(stream.GetColumn()),
 			kind:     stream.GetKind(),
 		}
-		r.streams[name] = streamBuf
+		r.streams.set(name, streamBuf)
 
+		// Increment the streamOffset for the next stream.
 		streamOffset += streamLength
 	}
 

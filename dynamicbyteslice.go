@@ -91,6 +91,7 @@ func (d *DynamicByteSlice) readAll(r io.ByteReader) error {
 	currentChunk := d.length / d.chunkSize
 	currentOffset := d.length % d.chunkSize
 	d.grow(currentChunk)
+	var currentLength int
 	var i int
 	for i = currentOffset; i < d.chunkSize-currentOffset; i++ {
 		b, err := r.ReadByte()
@@ -98,8 +99,25 @@ func (d *DynamicByteSlice) readAll(r io.ByteReader) error {
 			return err
 		}
 		d.data[currentChunk][i] = b
+		currentLength++
 	}
-	d.length += i
+	for currentLength > 0 {
+		d.length += currentLength
+		currentOffset = d.length % d.chunkSize
+		if currentOffset == 0 {
+			currentChunk = d.length / d.chunkSize
+			d.grow(currentChunk)
+		}
+		currentLength = 0
+		for j := currentOffset; j < d.chunkSize-currentOffset; j++ {
+			b, err := r.ReadByte()
+			if err != nil {
+				return err
+			}
+			d.data[currentChunk][j] = b
+			currentLength++
+		}
+	}
 	return nil
 }
 
@@ -176,33 +194,19 @@ func (d *DynamicByteSlice) write(out io.ByteWriter, offset int, length int) erro
 	return nil
 }
 
-func (d *DynamicByteSlice) String() (string, error) {
+func (d *DynamicByteSlice) String() string {
 	var i int
 	var buf bytes.Buffer
-	_, err := buf.WriteString(`{`)
-	if err != nil {
-		return "", err
-	}
+	buf.WriteString(`{`)
 	l := d.length - 1
 	for i := 0; i < l; i++ {
-		_, err := buf.WriteString(fmt.Sprintf("%#x", d.getIndex(i)))
-		if err != nil {
-			return "", err
-		}
-		_, err = buf.WriteString(`,`)
-		if err != nil {
-			return "", err
-		}
+		buf.WriteString(fmt.Sprintf("%#x", d.getIndex(i)))
+		buf.WriteString(`,`)
+
 	}
-	_, err = buf.WriteString(fmt.Sprintf("%#x", d.getIndex(i)))
-	if err != nil {
-		return "", err
-	}
-	_, err = buf.WriteString(`}`)
-	if err != nil {
-		return "", err
-	}
-	return buf.String(), nil
+	buf.WriteString(fmt.Sprintf("%#x", d.getIndex(i)))
+	buf.WriteString(`}`)
+	return buf.String()
 }
 
 func (d *DynamicByteSlice) setByteBuffer(result bytes.Buffer, offset int, length int) {

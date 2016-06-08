@@ -117,6 +117,6 @@ func (r *RunLengthIntegerReader) Next() interface{} {
 	return r.NextInt()
 }
 
-func (r *RunLengthIntegerReader) Error() error {
+func (r *RunLengthIntegerReader) Err() error {
 	return r.err
 }

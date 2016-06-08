@@ -9,7 +9,7 @@ import (
 
 func TestReader(t *testing.T) {
 
-	orcFile, err := os.Open("./examples/orc-file-11-format.orc")
+	orcFile, err := os.Open("./examples/TestOrcFile.columnProjection.orc")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,23 +20,35 @@ func TestReader(t *testing.T) {
 	}
 	defer r.Close()
 
-	// t.Log(r.streams)
-
-	stream, err := r.streams.get(streamName{1, proto.Stream_DATA})
+	// t.Log(r)
+	// present, err := r.streams.get(streamName{2, proto.Stream_PRESENT})
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+	data, err := r.streams.get(streamName{2, proto.Stream_DATA})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// dictionary, err := r.streams.get(streamName{2, proto.Stream_DICTIONARY_DATA})
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+	length, err := r.streams.get(streamName{2, proto.Stream_LENGTH})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// i := NewRunLengthIntegerReaderV2(&stream, true, false)
-	// for i.HasNext() {
-	// 	t.Log(i.NextInt())
-	// }
+	sr, err := NewStringTreeReader(nil, &data, &length, nil, r.columns[2])
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	row := 0
-	i := NewBooleanReader(&stream)
-	for i.HasNext() {
-		t.Log(row, i.NextBool())
-		row++
+	for sr.HasNext() {
+		t.Log(sr.Next())
+	}
+
+	if err := sr.Err(); err != nil {
+		t.Fatal(err)
 	}
 
 }
