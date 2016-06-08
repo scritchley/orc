@@ -1,3 +1,5 @@
+syntax = "proto2";
+
 /**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -16,7 +18,7 @@
  * limitations under the License.
  */
 
-package orc.proto;
+package proto;
 
 message IntegerStatistics  {
   optional sint64 minimum = 1;
