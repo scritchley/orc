@@ -4,6 +4,9 @@
 [![code-coverage](http://gocover.io/_badge/code.simon-critchley.co.uk/orc)](http://gocover.io/code.simon-critchley.co.uk/orc)
 [![go-doc](https://godoc.org/code.simon-critchley.co.uk/orc?status.svg)](https://godoc.org/code.simon-critchley.co.uk/orc)
 
+## Project Status
+
+This project is still a work in progress. The reader currently supports boolean, byte, short, int, long, string, varchar and char types. The reader currently only supports NONE and ZLIB compression types, SNAPPY support is not currently working.
 
 ### Example
 
@@ -12,13 +15,17 @@
         log.Fatal(err)
     }
     defer r.Close()
-
+    
+    // Create a new Cursor reading the provided columns.
     c := r.Select("_col0", "_col1", "_col2")
 
+    // Iterate over each stripe in the file.
     for c.Stripes()
-            
+        
+        // Iterate over each row in the stripe.
         for c.Next() {
-            
+              
+            // Retrieve a slice of interface values for the current row.
             log.Println(c.Row())
             
         }
