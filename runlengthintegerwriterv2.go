@@ -7,41 +7,47 @@ import (
 )
 
 type RunLengthIntegerWriterV2 struct {
-	w                 io.ByteWriter
-	signed            bool
-	alignedBitpacking bool
-	numLiterals       int
-	literals          []int64
-	encoding          RLEEncodingType
-	prevDelta         int64
-	fixedDelta        int64
-	zzBits90p         int
-	zzBits100p        int
-	brBits95p         int
-	brBits100p        int
-	bitsDeltaMax      int
-	patchGapWidth     int
-	patchLength       int
-	patchWidth        int
-	gapVsPatchList    []int64
-	isFixedDelta      bool
-	variableRunLength int
-	fixedRunLength    int
-	zigzagLiterals    []int64
-	baseRedLiterals   []int64
-	adjDeltas         []int64
-	min               int64
+	w                    io.ByteWriter
+	signed               bool
+	alignedBitpacking    bool
+	numLiterals          int
+	literals             []int64
+	encoding             RLEEncodingType
+	prevDelta            int64
+	fixedDelta           int64
+	zzBits90p            int
+	zzBits100p           int
+	brBits95p            int
+	brBits100p           int
+	bitsDeltaMax         int
+	patchGapWidth        int
+	patchLength          int
+	patchWidth           int
+	gapVsPatchList       []int64
+	isFixedDelta         bool
+	variableRunLength    int
+	fixedRunLength       int
+	zigzagLiterals       []int64
+	baseRedLiterals      []int64
+	adjDeltas            []int64
+	min                  int64
+	minRepeatSize        int
+	maxScope             int
+	maxShortRepeatLength int
 }
 
 func NewRunLengthIntegerWriterV2(w io.ByteWriter, signed bool) *RunLengthIntegerWriterV2 {
 	i := &RunLengthIntegerWriterV2{
-		w:                 w,
-		signed:            signed,
-		literals:          make([]int64, MaxScope, MaxScope),
-		zigzagLiterals:    make([]int64, MaxScope, MaxScope),
-		baseRedLiterals:   make([]int64, MaxScope, MaxScope),
-		adjDeltas:         make([]int64, MaxScope, MaxScope),
-		alignedBitpacking: true,
+		w:                    w,
+		signed:               signed,
+		literals:             make([]int64, MaxScope, MaxScope),
+		zigzagLiterals:       make([]int64, MaxScope, MaxScope),
+		baseRedLiterals:      make([]int64, MaxScope, MaxScope),
+		adjDeltas:            make([]int64, MaxScope, MaxScope),
+		alignedBitpacking:    true,
+		minRepeatSize:        MinRepeatSize,
+		maxScope:             MaxScope,
+		maxShortRepeatLength: MaxShortRepeatLength,
 	}
 	i.clear()
 	return i
@@ -56,7 +62,7 @@ func (i *RunLengthIntegerWriterV2) Flush() error {
 			}
 			return i.writeValues()
 		} else if i.fixedRunLength != 0 {
-			if i.fixedRunLength < MinRepeatSize {
+			if i.fixedRunLength < i.minRepeatSize {
 				i.variableRunLength = i.fixedRunLength
 				i.fixedRunLength = 0
 				err := i.determineEncoding()
@@ -64,8 +70,8 @@ func (i *RunLengthIntegerWriterV2) Flush() error {
 					return err
 				}
 				return i.writeValues()
-			} else if i.fixedRunLength >= MinRepeatSize &&
-				i.fixedRunLength <= MaxShortRepeatLength {
+			} else if i.fixedRunLength >= i.minRepeatSize &&
+				i.fixedRunLength <= i.maxShortRepeatLength {
 				i.encoding = RLEV2IntShortRepeat
 				return i.writeValues()
 			} else {
@@ -112,12 +118,12 @@ func (i *RunLengthIntegerWriterV2) WriteInt(val int64) error {
 				// if fixed run met the minimum condition and if variable
 				// run is non-zero then flush the variable run and shift the
 				// tail fixed runs to start of the buffer
-				if i.fixedRunLength >= MinRepeatSize && i.variableRunLength > 0 {
-					i.numLiterals -= MinRepeatSize
-					i.variableRunLength -= MinRepeatSize - 1
+				if i.fixedRunLength >= i.minRepeatSize && i.variableRunLength > 0 {
+					i.numLiterals -= i.minRepeatSize
+					i.variableRunLength -= i.minRepeatSize - 1
 					// copy the tail fixed runs
-					tailVals := make([]int64, MinRepeatSize)
-					copy(tailVals, i.literals[i.numLiterals:i.numLiterals+MinRepeatSize])
+					tailVals := make([]int64, i.minRepeatSize)
+					copy(tailVals, i.literals[i.numLiterals:i.numLiterals+i.minRepeatSize])
 					// determine variable encoding and flush values
 					err := i.determineEncoding()
 					if err != nil {
@@ -135,7 +141,7 @@ func (i *RunLengthIntegerWriterV2) WriteInt(val int64) error {
 				}
 
 				// if fixed runs reached max repeat length then write values
-				if i.fixedRunLength == MaxScope {
+				if i.fixedRunLength == i.maxScope {
 					err := i.determineEncoding()
 					if err != nil {
 						return err
@@ -151,8 +157,8 @@ func (i *RunLengthIntegerWriterV2) WriteInt(val int64) error {
 				// if fixed run length is non-zero and if it satisfies the
 				// short repeat conditions then write the values as short repeats
 				// else use delta encoding
-				if i.fixedRunLength >= MinRepeatSize {
-					if i.fixedRunLength <= MaxShortRepeatLength {
+				if i.fixedRunLength >= i.minRepeatSize {
+					if i.fixedRunLength <= i.maxShortRepeatLength {
 						i.encoding = RLEV2IntShortRepeat
 						err := i.writeValues()
 						if err != nil {
@@ -170,7 +176,7 @@ func (i *RunLengthIntegerWriterV2) WriteInt(val int64) error {
 
 				// if fixed run length is <MIN_REPEAT and current value is
 				// different from previous then treat it as variable run
-				if i.fixedRunLength > 0 && i.fixedRunLength < MinRepeatSize {
+				if i.fixedRunLength > 0 && i.fixedRunLength < i.minRepeatSize {
 					if val != i.literals[i.numLiterals-1] {
 						i.variableRunLength = i.fixedRunLength
 						i.fixedRunLength = 0
@@ -188,7 +194,7 @@ func (i *RunLengthIntegerWriterV2) WriteInt(val int64) error {
 					i.variableRunLength++
 
 					// if variable run length reach the max scope, write it
-					if i.variableRunLength == MaxScope {
+					if i.variableRunLength == i.maxScope {
 						err := i.determineEncoding()
 						if err != nil {
 							return err
@@ -265,7 +271,7 @@ func (i *RunLengthIntegerWriterV2) determineEncoding() error {
 	i.zzBits100p = percentileBits(i.zigzagLiterals, 0, i.numLiterals, 1.0)
 
 	// not a big win for shorter runs to determine encoding
-	if i.numLiterals <= MinRepeatSize {
+	if i.numLiterals <= i.minRepeatSize {
 		i.encoding = RLEV2IntDirect
 		return nil
 	}
@@ -397,14 +403,12 @@ func (i *RunLengthIntegerWriterV2) determineEncoding() error {
 
 func (i *RunLengthIntegerWriterV2) computeZigZagLiterals() {
 	// populate zigzag encoded literals
-	zzEncVal := int64(0)
 	for j := 0; j < i.numLiterals; j++ {
 		if i.signed {
-			zzEncVal = int64(zigzagEncode(i.literals[j]))
+			i.zigzagLiterals[j] = int64(zigzagEncode(i.literals[j]))
 		} else {
-			zzEncVal = i.literals[j]
+			i.zigzagLiterals[j] = i.literals[j]
 		}
-		i.zigzagLiterals[j] = zzEncVal
 	}
 }
 
@@ -540,7 +544,7 @@ func (i *RunLengthIntegerWriterV2) writeShortRepeatValues() error {
 	header := i.getOpCode()
 	header |= (numBytesRepeatVal - 1) << 3
 
-	i.fixedRunLength -= MinRepeatSize
+	i.fixedRunLength -= i.minRepeatSize
 
 	header |= i.fixedRunLength
 

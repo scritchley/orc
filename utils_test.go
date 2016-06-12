@@ -41,3 +41,33 @@ func TestSubtractionOverflow(t *testing.T) {
 		}
 	}
 }
+
+func TestZigZagEncoder(t *testing.T) {
+	ints := []int64{0, -1, 1, -2, 2, -3, 3, -4, 4, -5}
+	for i, v := range ints {
+		if int(zigzagEncode(v)) != i {
+			t.Errorf("Test failed, expected %v to equal %v", v, i)
+		}
+	}
+}
+
+func TestZigZagDecode(t *testing.T) {
+	ints := []int64{0, -1, 1, -2, 2, -3, 3, -4, 4, -5}
+	for i, v := range ints {
+		if zigzagDecode(uint64(i)) != v {
+			t.Errorf("Test failed, expected %v to equal %v", i, v)
+		}
+	}
+}
+
+func BenchmarkzigzagEncodeeger(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		zigzagEncode(int64(i))
+	}
+}
+
+func BenchmarkzigzagDecodeeger(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		zigzagDecode(uint64(i))
+	}
+}

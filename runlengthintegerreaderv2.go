@@ -6,6 +6,33 @@ import (
 	"io"
 )
 
+var (
+	ErrEOFUnsignedVInt = fmt.Errorf("EOF while reading unsigned vint")
+	ErrCorrupt         = fmt.Errorf("ORC file is corrupt")
+)
+
+const (
+	// MinRepeatSize is the minimum number of repeated values required to use run length encoding.
+	MinRepeatSize = 3
+	// MaxShortRepeatLength is the maximum run length used for RLEV2IntShortRepeat sequences.
+	MaxShortRepeatLength = 10
+	// MaxScope is the maximum number of values that can be buffered before being flushed.
+	MaxScope = 512
+)
+
+//go:generate stringer -type=RLEEncodingType
+
+// RLEEncodingType is a run length encoding type specified within the Apache
+// ORC file documentation: https://orc.apache.org/docs/run-length.html
+type RLEEncodingType int
+
+const (
+	RLEV2IntShortRepeat RLEEncodingType = 0
+	RLEV2IntDirect      RLEEncodingType = 1
+	RLEV2IntPatchedBase RLEEncodingType = 2
+	RLEV2IntDelta       RLEEncodingType = 3
+)
+
 type RunLengthIntegerReaderV2 struct {
 	r               io.ByteReader
 	signed          bool
@@ -17,14 +44,16 @@ type RunLengthIntegerReaderV2 struct {
 	currentEncoding RLEEncodingType
 	err             error
 	nextByte        *byte
+	minRepeatSize   int
 }
 
 func NewRunLengthIntegerReaderV2(r io.ByteReader, signed bool, skipCorrupt bool) *RunLengthIntegerReaderV2 {
 	return &RunLengthIntegerReaderV2{
-		r:           r,
-		signed:      signed,
-		skipCorrupt: skipCorrupt,
-		literals:    make([]int64, MaxScope),
+		r:             r,
+		signed:        signed,
+		skipCorrupt:   skipCorrupt,
+		literals:      make([]int64, MaxScope),
+		minRepeatSize: MinRepeatSize,
 	}
 }
 
@@ -77,14 +106,6 @@ func (r *RunLengthIntegerReaderV2) readValues(ignoreEOF bool) error {
 	firstByte, err := r.ReadByte()
 	if err != nil {
 		return err
-	}
-	if firstByte < 0 {
-		if !ignoreEOF {
-			return errors.New("Read past end of RLE integer")
-		}
-		r.used = 0
-		r.numLiterals = 0
-		return nil
 	}
 	r.currentEncoding = RLEEncodingType((uint64(firstByte) >> 6) & 0x03)
 	switch r.currentEncoding {
@@ -204,7 +225,7 @@ func (r *RunLengthIntegerReaderV2) readShortRepeatValues(firstByte byte) error {
 	l := int(firstByte & 0x07)
 
 	// run lengths values are stored only after MIN_REPEAT value is met
-	l += MinRepeatSize
+	l += r.minRepeatSize
 
 	val, err := bytesToLongBE(r, int(size))
 	if err != nil {
@@ -234,10 +255,8 @@ func (r *RunLengthIntegerReaderV2) readShortRepeatValues(firstByte byte) error {
 func (r *RunLengthIntegerReaderV2) readDirectValues(firstByte byte) error {
 
 	// extract the number of fixed bits
-	fb := (uint64(firstByte) >> 1) & 0x1f
-	if fb != 0 {
-		fb = uint64(decodeBitWidth(int(fb)))
-	}
+	fbo := (uint64(firstByte) >> 1) & 0x1f
+	fb := uint64(decodeBitWidth(int(fbo)))
 
 	// extract the run length
 	l := int((int64(firstByte) & 0x01) << 8)
@@ -394,4 +413,12 @@ func (r *RunLengthIntegerReaderV2) readPatchedBaseValues(firstByte byte) error {
 	}
 
 	return nil
+}
+
+func (r *RunLengthIntegerReaderV2) Err() error {
+	return r.err
+}
+
+func (r *RunLengthIntegerReaderV2) IsPresent() bool {
+	return true
 }
