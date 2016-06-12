@@ -39,7 +39,7 @@ func TestBooleanReader(t *testing.T) {
 			b := r.NextBool()
 			output = append(output, b)
 		}
-		if err := r.Error(); err != nil && err != io.EOF {
+		if err := r.Err(); err != nil && err != io.EOF {
 			t.Fatal(err)
 		}
 		tc.expect(output)

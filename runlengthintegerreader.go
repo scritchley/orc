@@ -120,3 +120,7 @@ func (r *RunLengthIntegerReader) Next() interface{} {
 func (r *RunLengthIntegerReader) Err() error {
 	return r.err
 }
+
+func (r *RunLengthIntegerReader) IsPresent() bool {
+	return true
+}

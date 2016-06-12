@@ -1,13 +1,13 @@
 package orc
 
 import (
-	"bytes"
 	"fmt"
+	"io"
 
 	"code.simon-critchley.co.uk/orc/proto"
 )
 
-type streamMap map[streamName]bytes.Buffer
+type streamMap map[streamName]io.Reader
 
 func (s streamMap) reset() {
 	for k := range s {
@@ -15,15 +15,15 @@ func (s streamMap) reset() {
 	}
 }
 
-func (s streamMap) set(name streamName, buf bytes.Buffer) {
+func (s streamMap) set(name streamName, buf io.Reader) {
 	s[name] = buf
 }
 
-func (s streamMap) get(name streamName) (bytes.Buffer, error) {
+func (s streamMap) get(name streamName) io.Reader {
 	if b, ok := s[name]; ok {
-		return b, nil
+		return b
 	}
-	return bytes.Buffer{}, fmt.Errorf("%s stream not found", name)
+	return nil
 }
 
 type streamName struct {

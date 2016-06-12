@@ -13,6 +13,10 @@ type Category struct {
 	isPrimitive bool
 }
 
+func (c Category) String() string {
+	return c.name
+}
+
 var (
 	CategoryBoolean   = Category{"boolean", true}
 	CategoryByte      = Category{"tinyint", true}
@@ -382,6 +386,25 @@ func AddUnionChild(fns ...TypeDescriptionTransformFunc) TypeDescriptionTransform
 	}
 }
 
+func AddChild(fns ...TypeDescriptionTransformFunc) TypeDescriptionTransformFunc {
+	return func(t *TypeDescription) error {
+		ut, err := NewTypeDescription(fns...)
+		if err != nil {
+			return err
+		}
+		return t.addChild(ut)
+	}
+}
+
+func (t *TypeDescription) addChild(child *TypeDescription) error {
+	if t.category != CategoryList && t.category != CategoryMap {
+		return fmt.Errorf("Can only add child to map or list type and not %s", t.category.name)
+	}
+	t.children = append(t.children, child)
+	child.parent = t
+	return nil
+}
+
 func (t *TypeDescription) addUnionChild(child *TypeDescription) error {
 	if t.category.name != CategoryUnion.name {
 		return fmt.Errorf("Can only add types to union type and not %s", t.category.name)
@@ -438,6 +461,10 @@ func (t *TypeDescription) getID() int {
 		root.assignIDs(0)
 	}
 	return t.id
+}
+
+func (t *TypeDescription) getCategory() Category {
+	return t.category
 }
 
 func (t *TypeDescription) assignIDs(startID int) int {
@@ -549,4 +576,61 @@ func (t *TypeDescription) ToJSON() string {
 	var buf bytes.Buffer
 	t.printJSONToBuffer("", &buf, 0)
 	return buf.String()
+}
+
+func (t *TypeDescription) GetField(fieldName string) (*TypeDescription, error) {
+	fieldNames := strings.Split(fieldName, ".")
+	root := fieldNames[0]
+	if len(fieldNames) == 1 {
+		if root == "" || root == "*" {
+			return t, nil
+		}
+		if len(t.fieldNames) != len(t.children) {
+			return nil, fmt.Errorf("no field with name: %s", fieldName)
+		}
+		for i, child := range t.children {
+			if t.fieldNames[i] == root {
+				return child, nil
+			}
+		}
+
+	}
+	for i, child := range t.children {
+		if t.fieldNames[i] == root {
+			return child.GetField(strings.Join(fieldNames[1:], "."))
+		}
+	}
+	return nil, fmt.Errorf("no field with name: %s", fieldName)
+}
+
+func createMap(key, value *TypeDescription) (*TypeDescription, error) {
+	td, err := NewTypeDescription(
+		SetCategory(CategoryMap),
+	)
+	if err != nil {
+		return nil, err
+	}
+	err = td.addChild(key)
+	if err != nil {
+		return nil, err
+	}
+	err = td.addChild(value)
+	if err != nil {
+		return nil, err
+	}
+	return td, nil
+}
+
+func createList(child *TypeDescription) (*TypeDescription, error) {
+	td, err := NewTypeDescription(
+		SetCategory(CategoryList),
+	)
+	if err != nil {
+		return nil, err
+	}
+	err = td.addChild(child)
+	if err != nil {
+		return nil, err
+	}
+	return td, nil
 }

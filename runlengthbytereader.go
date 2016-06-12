@@ -94,6 +94,6 @@ func (b *RunLengthByteReader) Next() interface{} {
 	return b.NextByte()
 }
 
-func (b *RunLengthByteReader) Error() error {
+func (b *RunLengthByteReader) Err() error {
 	return b.err
 }

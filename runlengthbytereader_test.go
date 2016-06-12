@@ -55,7 +55,7 @@ func TestRunLengthByteReader(t *testing.T) {
 			b := bs.NextByte()
 			output = append(output, b)
 		}
-		if err := bs.Error(); err != nil && err != io.EOF {
+		if err := bs.Err(); err != nil && err != io.EOF {
 			t.Fatal(err)
 		}
 		tc.expect(output)

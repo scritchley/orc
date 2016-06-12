@@ -1,5 +1,9 @@
 package orc
 
+import (
+	"os"
+)
+
 type EncodingStrategy int
 
 const (
@@ -24,3 +28,23 @@ var (
 	Version0_11 = Version{"0.11", 0, 11}
 	Version0_12 = Version{"0.12", 0, 12}
 )
+
+type FileReader struct {
+	*os.File
+}
+
+func (f FileReader) Size() int64 {
+	stats, err := f.Stat()
+	if err != nil {
+		return 0
+	}
+	return stats.Size()
+}
+
+func Open(name string) (*Reader, error) {
+	f, err := os.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	return NewReader(FileReader{f})
+}

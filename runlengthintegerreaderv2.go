@@ -418,3 +418,7 @@ func (r *RunLengthIntegerReaderV2) readPatchedBaseValues(firstByte byte) error {
 func (r *RunLengthIntegerReaderV2) Err() error {
 	return r.err
 }
+
+func (r *RunLengthIntegerReaderV2) IsPresent() bool {
+	return true
+}
