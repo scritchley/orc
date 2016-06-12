@@ -42,13 +42,62 @@ func createTreeReader(schema *TypeDescription, m streamMap, r *Reader) (TreeRead
 			encoding,
 		)
 	// case CategoryDate:
-	// case CategoryTimestamp:
+	case CategoryTimestamp:
+		return NewTimestampTreeReader(
+			m.get(streamName{id, proto.Stream_PRESENT}),
+			m.get(streamName{id, proto.Stream_DATA}),
+			m.get(streamName{id, proto.Stream_SECONDARY}),
+			encoding,
+		)
 	// case CategoryBinary:
 	// case CategoryDecimal:
-	// case CategoryList:
-	// case CategoryMap:
-	// case CategoryStruct:
-	// case CategoryUnion:
+	case CategoryList:
+		if len(schema.children) != 1 {
+			return nil, fmt.Errorf("expect 1 child for list type, got: %v", len(schema.children))
+		}
+		valueReader, err := createTreeReader(schema.children[0], m, r)
+		if err != nil {
+			return nil, err
+		}
+		return NewListTreeReader(
+			m.get(streamName{id, proto.Stream_PRESENT}),
+			m.get(streamName{id, proto.Stream_LENGTH}),
+			valueReader,
+			encoding,
+		)
+	case CategoryMap:
+		if len(schema.children) != 2 {
+			return nil, fmt.Errorf("expect 2 children for map type, got: %v", len(schema.children))
+		}
+		keyReader, err := createTreeReader(schema.children[0], m, r)
+		if err != nil {
+			return nil, err
+		}
+		valueReader, err := createTreeReader(schema.children[1], m, r)
+		if err != nil {
+			return nil, err
+		}
+		return NewMapTreeReader(
+			m.get(streamName{id, proto.Stream_PRESENT}),
+			m.get(streamName{id, proto.Stream_LENGTH}),
+			keyReader,
+			valueReader,
+			encoding,
+		)
+	case CategoryStruct:
+		children := make(map[string]TreeReader)
+		for i := range schema.children {
+			child, err := createTreeReader(schema.children[i], m, r)
+			if err != nil {
+				return nil, err
+			}
+			children[schema.fieldNames[i]] = child
+		}
+		return NewStructTreeReader(
+			m.get(streamName{id, proto.Stream_PRESENT}),
+			children,
+		)
+		// case CategoryUnion:
 	default:
 		return nil, fmt.Errorf("unsupported type: %s", category)
 	}

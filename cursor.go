@@ -25,6 +25,7 @@ func (c *Cursor) Select(fields ...string) *Cursor {
 		}
 		columns = append(columns, column)
 		included = append(included, column.getID())
+		included = append(included, column.getChildrenIDs()...)
 	}
 	c.columns = columns
 	c.included = included

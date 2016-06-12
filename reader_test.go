@@ -2,6 +2,7 @@ package orc
 
 import (
 	"fmt"
+	"io"
 	"testing"
 )
 
@@ -13,7 +14,7 @@ func TestReader(t *testing.T) {
 	}
 	defer r.Close()
 
-	c := r.Select("boolean1", "int1", "string1", "byte1")
+	c := r.Select("boolean1", "int1", "string1", "byte1", "long1", "middle", "list")
 
 	for c.Stripes() {
 
@@ -25,7 +26,7 @@ func TestReader(t *testing.T) {
 
 	}
 
-	if err := c.Err(); err != nil {
+	if err := c.Err(); err != nil && err != io.EOF {
 		t.Fatal(err)
 	}
 

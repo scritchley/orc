@@ -463,6 +463,16 @@ func (t *TypeDescription) getID() int {
 	return t.id
 }
 
+func (t *TypeDescription) getChildrenIDs() []int {
+	min := t.getID()
+	max := t.maxId
+	ids := make([]int, max-min, max-min)
+	for i := range ids {
+		ids[i] = min + i + 1
+	}
+	return ids
+}
+
 func (t *TypeDescription) getCategory() Category {
 	return t.category
 }

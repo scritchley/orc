@@ -171,6 +171,7 @@ func (r *Reader) getStreams(included ...int) (streamMap, error) {
 	}
 
 	stripe := stripes[r.currentStripeOffset]
+	// Increment the currentStripeOffset so that the next call returns the next stripe.
 	r.currentStripeOffset++
 
 	// Unmarshal the stripe footer

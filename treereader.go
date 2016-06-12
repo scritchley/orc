@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"time"
 
 	"code.simon-critchley.co.uk/orc/proto"
 )
@@ -107,6 +108,72 @@ func createIntegerReader(kind proto.ColumnEncoding_Kind, in io.Reader, signed, s
 	default:
 		return nil, fmt.Errorf("unknown encoding: %s", kind)
 	}
+}
+
+const (
+	// TimestampBaseSeconds is 1 January 2015, the base value for all timestamp values.
+	TimestampBaseSeconds int64 = 1420070400
+)
+
+type TimestampTreeReader struct {
+	BaseTreeReader
+	data      IntegerReader
+	secondary IntegerReader
+}
+
+func (t *TimestampTreeReader) HasNext() bool {
+	return t.data.HasNext() && t.secondary.HasNext()
+}
+
+func (t *TimestampTreeReader) NextTimestamp() time.Time {
+	return time.Unix(TimestampBaseSeconds+t.data.NextInt(), t.secondary.NextInt())
+}
+
+func (t *TimestampTreeReader) Next() interface{} {
+	return t.NextTimestamp()
+}
+
+func (t *TimestampTreeReader) Err() error {
+	if err := t.data.Err(); err != nil {
+		return err
+	}
+	return t.secondary.Err()
+}
+
+func NewTimestampTreeReader(present, data, secondary io.Reader, encoding *proto.ColumnEncoding) (*TimestampTreeReader, error) {
+	dataReader, err := createIntegerReader(encoding.GetKind(), data, true, false)
+	if err != nil {
+		return nil, err
+	}
+	secondaryReader, err := createIntegerReader(encoding.GetKind(), secondary, true, false)
+	if err != nil {
+		return nil, err
+	}
+	return &TimestampTreeReader{
+		BaseTreeReader: NewBaseTreeReader(present),
+		data:           dataReader,
+		secondary:      secondaryReader,
+	}, nil
+}
+
+type DateTreeReader struct {
+	IntegerReader
+}
+
+func (d *DateTreeReader) NextDate() time.Time {
+	return time.Unix(86400*d.NextInt(), 0)
+}
+
+func (d *DateTreeReader) Next() interface{} {
+	return d.NextDate()
+}
+
+func NewDateTreeReader(present, data io.Reader, encoding *proto.ColumnEncoding) (*DateTreeReader, error) {
+	reader, err := NewIntegerTreeReader(present, data, encoding)
+	if err != nil {
+		return nil, err
+	}
+	return &DateTreeReader{reader}, nil
 }
 
 // IntegerReader is an interface that provides methods for reading a string stream.
@@ -275,10 +342,6 @@ type BooleanTreeReader struct {
 	*BooleanReader
 }
 
-func (b *BooleanTreeReader) IsPresent() bool {
-	return b.BaseTreeReader.IsPresent()
-}
-
 func (b *BooleanTreeReader) HasNext() bool {
 	return b.BaseTreeReader.HasNext() && b.BooleanReader.HasNext()
 }
@@ -337,5 +400,115 @@ func NewByteTreeReader(present, data io.Reader, encoding *proto.ColumnEncoding) 
 	return &ByteTreeReader{
 		NewBaseTreeReader(present),
 		NewRunLengthByteReader(bufio.NewReader(data)),
+	}, nil
+}
+
+type MapTreeReader struct {
+	BaseTreeReader
+	length IntegerReader
+	key    TreeReader
+	value  TreeReader
+}
+
+func (m *MapTreeReader) HasNext() bool {
+	return m.length.HasNext() && m.key.HasNext() && m.value.HasNext()
+}
+
+func (m *MapTreeReader) NextMap() map[interface{}]interface{} {
+	l := int(m.length.NextInt())
+	kv := make(map[interface{}]interface{})
+	for i := 0; i < l; i++ {
+		k := m.key.Next()
+		v := m.value.Next()
+		kv[k] = v
+	}
+	return kv
+}
+
+func (m *MapTreeReader) Next() interface{} {
+	return m.NextMap()
+}
+
+func NewMapTreeReader(present, length io.Reader, key, value TreeReader, encoding *proto.ColumnEncoding) (*MapTreeReader, error) {
+	lengthReader, err := createIntegerReader(encoding.GetKind(), length, false, false)
+	if err != nil {
+		return nil, err
+	}
+	return &MapTreeReader{
+		NewBaseTreeReader(present),
+		lengthReader,
+		key,
+		value,
+	}, nil
+}
+
+type ListTreeReader struct {
+	BaseTreeReader
+	length IntegerReader
+	value  TreeReader
+}
+
+func (r *ListTreeReader) HasNext() bool {
+	return r.length.HasNext() && r.value.HasNext()
+}
+
+func (r *ListTreeReader) NextList() []interface{} {
+	l := int(r.length.NextInt())
+	ls := make([]interface{}, l, l)
+	for i := range ls {
+		ls[i] = r.value.Next()
+		if !r.value.HasNext() {
+			break
+		}
+	}
+	return ls
+}
+
+func (r *ListTreeReader) Next() interface{} {
+	return r.NextList()
+}
+
+func NewListTreeReader(present, length io.Reader, value TreeReader, encoding *proto.ColumnEncoding) (*ListTreeReader, error) {
+	lengthReader, err := createIntegerReader(encoding.GetKind(), length, false, false)
+	if err != nil {
+		return nil, err
+	}
+	return &ListTreeReader{
+		NewBaseTreeReader(present),
+		lengthReader,
+		value,
+	}, nil
+}
+
+type StructTreeReader struct {
+	BaseTreeReader
+	children map[string]TreeReader
+}
+
+func (s *StructTreeReader) HasNext() bool {
+	for _, v := range s.children {
+		if !v.HasNext() {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *StructTreeReader) NextStruct() map[string]interface{} {
+	st := make(map[string]interface{})
+	for k, v := range s.children {
+		st[k] = v.Next()
+	}
+	return st
+}
+
+func (s *StructTreeReader) Next() interface{} {
+	return s.NextStruct()
+}
+
+func NewStructTreeReader(present io.Reader, children map[string]TreeReader) (*StructTreeReader, error) {
+	return &StructTreeReader{
+		NewBaseTreeReader(present),
+		children,
 	}, nil
 }
