@@ -68,8 +68,8 @@ func TestRunLengthIntegerReader(t *testing.T) {
 	for _, tc := range testCases {
 		r := NewRunLengthIntegerReader(bytes.NewReader(tc.input), tc.signed)
 		var output []int64
-		for r.HasNext() {
-			v := r.NextInt()
+		for r.Next() {
+			v := r.Int()
 			output = append(output, v)
 		}
 		tc.expect(output)

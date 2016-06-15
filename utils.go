@@ -8,59 +8,59 @@ const (
 	BufferSize = 64
 )
 
-type FixedBitSizes int
+type fixedBitSize int
 
 const (
-	FixedBitSizeOne FixedBitSizes = iota
-	FixedBitSizeTwo
-	FixedBitSizeThree
-	FixedBitSizeFour
-	FixedBitSizeFive
-	FixedBitSizeSix
-	FixedBitSizeSeven
-	FixedBitSizeEight
-	FixedBitSizeNine
-	FixedBitSizeTen
-	FixedBitSizeEleven
-	FixedBitSizeTwelve
-	FixedBitSizeThirteen
-	FixedBitSizeFourteen
-	FixedBitSizeFifteen
-	FixedBitSizeSixteen
-	FixedBitSizeSeventeen
-	FixedBitSizeEighteen
-	FixedBitSizeNineteen
-	FixedBitSizeTwenty
-	FixedBitSizeTwentyOne
-	FixedBitSizeTwentyTwo
-	FixedBitSizeTwentyThree
-	FixedBitSizeTwentyFour
-	FixedBitSizeTwentySix
-	FixedBitSizeTwentyEight
-	FixedBitSizeThirty
-	FixedBitSizeThirtyTwo
-	FixedBitSizeForty
-	FixedBitSizeFortyEight
-	FixedBitSizeFiftySix
-	FixedBitSizeSixtyFour
+	fixedBitSizeOne fixedBitSize = iota
+	fixedBitSizeTwo
+	fixedBitSizeThree
+	fixedBitSizeFour
+	fixedBitSizeFive
+	fixedBitSizeSix
+	fixedBitSizeSeven
+	fixedBitSizeEight
+	fixedBitSizeNine
+	fixedBitSizeTen
+	fixedBitSizeEleven
+	fixedBitSizeTwelve
+	fixedBitSizeThirteen
+	fixedBitSizeFourteen
+	fixedBitSizeFifteen
+	fixedBitSizeSixteen
+	fixedBitSizeSeventeen
+	fixedBitSizeEighteen
+	fixedBitSizeNineteen
+	fixedBitSizeTwenty
+	fixedBitSizeTwentyOne
+	fixedBitSizeTwentyTwo
+	fixedBitSizeTwentyThree
+	fixedBitSizeTwentyFour
+	fixedBitSizeTwentySix
+	fixedBitSizeTwentyEight
+	fixedBitSizeThirty
+	fixedBitSizeThirtyTwo
+	fixedBitSizeForty
+	fixedBitSizeFortyEight
+	fixedBitSizeFiftySix
+	fixedBitSizeSixtyFour
 )
 
 func decodeBitWidth(n int) int {
-	if n >= int(FixedBitSizeOne) && n <= int(FixedBitSizeTwentyFour) {
+	if n >= int(fixedBitSizeOne) && n <= int(fixedBitSizeTwentyFour) {
 		return n + 1
-	} else if n == int(FixedBitSizeTwentySix) {
+	} else if n == int(fixedBitSizeTwentySix) {
 		return 26
-	} else if n == int(FixedBitSizeTwentyEight) {
+	} else if n == int(fixedBitSizeTwentyEight) {
 		return 28
-	} else if n == int(FixedBitSizeThirty) {
+	} else if n == int(fixedBitSizeThirty) {
 		return 30
-	} else if n == int(FixedBitSizeThirtyTwo) {
+	} else if n == int(fixedBitSizeThirtyTwo) {
 		return 32
-	} else if n == int(FixedBitSizeForty) {
+	} else if n == int(fixedBitSizeForty) {
 		return 40
-	} else if n == int(FixedBitSizeFortyEight) {
+	} else if n == int(fixedBitSizeFortyEight) {
 		return 48
-	} else if n == int(FixedBitSizeFiftySix) {
+	} else if n == int(fixedBitSizeFiftySix) {
 		return 56
 	} else {
 		return 64
@@ -71,21 +71,21 @@ func encodeBitWidth(n int) int {
 	if n >= 1 && n <= 24 {
 		return n - 1
 	} else if n > 24 && n <= 26 {
-		return int(FixedBitSizeTwentySix)
+		return int(fixedBitSizeTwentySix)
 	} else if n > 26 && n <= 28 {
-		return int(FixedBitSizeTwentyEight)
+		return int(fixedBitSizeTwentyEight)
 	} else if n > 28 && n <= 30 {
-		return int(FixedBitSizeThirty)
+		return int(fixedBitSizeThirty)
 	} else if n > 30 && n <= 32 {
-		return int(FixedBitSizeThirtyTwo)
+		return int(fixedBitSizeThirtyTwo)
 	} else if n > 32 && n <= 40 {
-		return int(FixedBitSizeForty)
+		return int(fixedBitSizeForty)
 	} else if n > 40 && n <= 48 {
-		return int(FixedBitSizeFortyEight)
+		return int(fixedBitSizeFortyEight)
 	} else if n > 48 && n <= 56 {
-		return int(FixedBitSizeFiftySix)
+		return int(fixedBitSizeFiftySix)
 	} else {
-		return int(FixedBitSizeSixtyFour)
+		return int(fixedBitSizeSixtyFour)
 	}
 }
 
@@ -236,7 +236,7 @@ func percentileBits(data []int64, offset int, length int, p float64) int {
 	}
 
 	// histogram that store the encoded bit requirement for each values.
-	// maximum number of bits that can encoded is 32 (refer FixedBitSizes)
+	// maximum number of bits that can encoded is 32 (refer fixedBitSizes)
 	hist := make([]int, 32, 32)
 
 	// compute the histogram

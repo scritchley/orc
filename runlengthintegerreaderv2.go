@@ -76,15 +76,15 @@ func (r *RunLengthIntegerReaderV2) ReadByte() (byte, error) {
 	return r.r.ReadByte()
 }
 
-func (r *RunLengthIntegerReaderV2) HasNext() bool {
+func (r *RunLengthIntegerReaderV2) Next() bool {
 	return r.used != r.numLiterals || r.available() == nil
 }
 
-func (r *RunLengthIntegerReaderV2) Next() interface{} {
-	return r.NextInt()
+func (r *RunLengthIntegerReaderV2) Value() interface{} {
+	return r.Int()
 }
 
-func (r *RunLengthIntegerReaderV2) NextInt() int64 {
+func (r *RunLengthIntegerReaderV2) Int() int64 {
 	var result int64
 	if r.used == r.numLiterals {
 		r.numLiterals = 0
@@ -417,8 +417,4 @@ func (r *RunLengthIntegerReaderV2) readPatchedBaseValues(firstByte byte) error {
 
 func (r *RunLengthIntegerReaderV2) Err() error {
 	return r.err
-}
-
-func (r *RunLengthIntegerReaderV2) IsPresent() bool {
-	return true
 }

@@ -70,8 +70,8 @@ func TestWriteReadRunLengthIntegerWriter(t *testing.T) {
 	}
 	r := NewRunLengthIntegerReader(&buf, true)
 	var index int
-	for r.HasNext() {
-		b := r.NextInt()
+	for r.Next() {
+		b := r.Int()
 		if input[index] != b {
 			t.Errorf("Test failed, %v does not equal %v at index %v", b, input[index], index)
 		}
@@ -97,8 +97,8 @@ func TestWriteReadRunLengthIntegerWriterRun(t *testing.T) {
 	}
 	r := NewRunLengthIntegerReader(&buf, true)
 	var index int
-	for r.HasNext() {
-		b := r.NextInt()
+	for r.Next() {
+		b := r.Int()
 		if input[index] != b {
 			t.Errorf("Test failed, %v does not equal %v at index %v", b, input[index], index)
 		}

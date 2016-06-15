@@ -14,7 +14,7 @@ func TestReader(t *testing.T) {
 	}
 	defer r.Close()
 
-	c := r.Select("boolean1", "int1", "string1", "byte1", "long1", "middle", "list")
+	c := r.Select("decimal1")
 
 	for c.Stripes() {
 

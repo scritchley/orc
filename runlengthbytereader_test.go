@@ -51,8 +51,8 @@ func TestRunLengthByteReader(t *testing.T) {
 	for _, tc := range testCases {
 		bs := NewRunLengthByteReader(bytes.NewReader(tc.input))
 		var output []byte
-		for bs.HasNext() {
-			b := bs.NextByte()
+		for bs.Next() {
+			b := bs.Byte()
 			output = append(output, b)
 		}
 		if err := bs.Err(); err != nil && err != io.EOF {
@@ -68,8 +68,8 @@ func BenchmarkRunLengthByteReader(b *testing.B) {
 	bs := NewRunLengthByteReader(bytes.NewReader(input))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if bs.HasNext() {
-			bs.NextByte()
+		if bs.Next() {
+			bs.Byte()
 		} else {
 			break
 		}

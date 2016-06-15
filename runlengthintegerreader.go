@@ -91,11 +91,11 @@ func (r *RunLengthIntegerReader) ReadByte() (byte, error) {
 	return r.r.ReadByte()
 }
 
-func (r *RunLengthIntegerReader) HasNext() bool {
+func (r *RunLengthIntegerReader) Next() bool {
 	return r.used != r.numLiterals || r.available() == nil
 }
 
-func (r *RunLengthIntegerReader) NextInt() int64 {
+func (r *RunLengthIntegerReader) Int() int64 {
 	var result int64
 	if r.used == r.numLiterals {
 		err := r.readValues()
@@ -113,14 +113,10 @@ func (r *RunLengthIntegerReader) NextInt() int64 {
 	return result
 }
 
-func (r *RunLengthIntegerReader) Next() interface{} {
-	return r.NextInt()
+func (r *RunLengthIntegerReader) Value() interface{} {
+	return r.Int()
 }
 
 func (r *RunLengthIntegerReader) Err() error {
 	return r.err
-}
-
-func (r *RunLengthIntegerReader) IsPresent() bool {
-	return true
 }

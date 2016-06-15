@@ -16,11 +16,11 @@ func NewBooleanReader(r io.ByteReader) *BooleanReader {
 	}
 }
 
-func (b *BooleanReader) HasNext() bool {
+func (b *BooleanReader) Next() bool {
 	// read more data if necessary
 	if b.bitsInData == 0 {
-		if b.RunLengthByteReader.HasNext() {
-			byt := b.RunLengthByteReader.NextByte()
+		if b.RunLengthByteReader.Next() {
+			byt := b.RunLengthByteReader.Byte()
 			b.data = byt
 			b.bitsInData = 8
 		} else {
@@ -34,12 +34,12 @@ func (b *BooleanReader) HasNext() bool {
 	return true
 }
 
-func (b *BooleanReader) NextBool() bool {
+func (b *BooleanReader) Bool() bool {
 	return b.val
 }
 
 func (b *BooleanReader) Value() interface{} {
-	return b.NextBool()
+	return b.Bool()
 }
 
 func (b *BooleanReader) Err() error {

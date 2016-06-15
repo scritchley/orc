@@ -35,8 +35,8 @@ func TestBooleanReader(t *testing.T) {
 	for _, tc := range testCases {
 		r := NewBooleanReader(bytes.NewReader(tc.input))
 		var output []bool
-		for r.HasNext() {
-			b := r.NextBool()
+		for r.Next() {
+			b := r.Bool()
 			output = append(output, b)
 		}
 		if err := r.Err(); err != nil && err != io.EOF {
@@ -52,8 +52,8 @@ func BenchmarkBooleanReader(b *testing.B) {
 	bs := NewBooleanReader(bytes.NewReader(input))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if bs.HasNext() {
-			bs.NextBool()
+		if bs.Next() {
+			bs.Bool()
 		} else {
 			break
 		}

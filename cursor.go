@@ -1,10 +1,7 @@
 package orc
 
-import (
-// "fmt"
-// "code.simon-critchley.co.uk/orc/proto"
-)
-
+// Cursor is used for iterating through the stripes and
+// rows within the ORC file.
 type Cursor struct {
 	*Reader
 	streams  streamMap
@@ -14,6 +11,8 @@ type Cursor struct {
 	err      error
 }
 
+// Select determines the columns that will be read from the ORC file.
+// Only streams for the selected columns will be loaded into memory.
 func (c *Cursor) Select(fields ...string) *Cursor {
 	var columns []*TypeDescription
 	var included []int
@@ -32,6 +31,8 @@ func (c *Cursor) Select(fields ...string) *Cursor {
 	return c
 }
 
+// prepareStreamReaders prepares TreeReaders for each of the columns
+// that will be read.
 func (c *Cursor) prepareStreamReaders() error {
 	var readers []TreeReader
 	// fmt.Println(c.streams)
@@ -46,6 +47,7 @@ func (c *Cursor) prepareStreamReaders() error {
 	return nil
 }
 
+// prepareNextStripe retrieves the stream information for the next stripe.
 func (c *Cursor) prepareNextStripe() error {
 	// Prepare the next stripe by loading it into memory
 	// and creating the required readers for each of the
@@ -86,7 +88,7 @@ func (c *Cursor) next() bool {
 	// Check all readers have values available. Assumes all readers
 	// will always have the same number of values per stripe.
 	for _, reader := range c.readers {
-		if !reader.HasNext() {
+		if !reader.Next() {
 			return false
 		}
 	}
@@ -97,7 +99,7 @@ func (c *Cursor) next() bool {
 func (c *Cursor) Row() []interface{} {
 	s := make([]interface{}, len(c.readers), len(c.readers))
 	for i, reader := range c.readers {
-		s[i] = reader.Next()
+		s[i] = reader.Value()
 	}
 	return s
 }

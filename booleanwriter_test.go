@@ -62,8 +62,8 @@ func TestWriteReadBools(t *testing.T) {
 	}
 	r := NewBooleanReader(&buf)
 	var index int
-	for r.HasNext() {
-		b := r.NextBool()
+	for r.Next() {
+		b := r.Bool()
 		if input[index] != b {
 			t.Errorf("Test failed, %v does not equal %v at index %v", b, input[index], index)
 		}

@@ -31,8 +31,20 @@ func createTreeReader(schema *TypeDescription, m streamMap, r *Reader) (TreeRead
 			m.get(streamName{id, proto.Stream_DATA}),
 			encoding,
 		)
-	// case CategoryFloat:
-	// case CategoryDouble:
+	case CategoryFloat:
+		return NewFloatTreeReader(
+			4,
+			m.get(streamName{id, proto.Stream_PRESENT}),
+			m.get(streamName{id, proto.Stream_DATA}),
+			encoding,
+		)
+	case CategoryDouble:
+		return NewFloatTreeReader(
+			8,
+			m.get(streamName{id, proto.Stream_PRESENT}),
+			m.get(streamName{id, proto.Stream_DATA}),
+			encoding,
+		)
 	case CategoryString, CategoryVarchar, CategoryChar:
 		return NewStringTreeReader(
 			m.get(streamName{id, proto.Stream_PRESENT}),
@@ -41,7 +53,12 @@ func createTreeReader(schema *TypeDescription, m streamMap, r *Reader) (TreeRead
 			m.get(streamName{id, proto.Stream_DICTIONARY_DATA}),
 			encoding,
 		)
-	// case CategoryDate:
+	case CategoryDate:
+		return NewDateTreeReader(
+			m.get(streamName{id, proto.Stream_PRESENT}),
+			m.get(streamName{id, proto.Stream_DATA}),
+			encoding,
+		)
 	case CategoryTimestamp:
 		return NewTimestampTreeReader(
 			m.get(streamName{id, proto.Stream_PRESENT}),
@@ -49,7 +66,13 @@ func createTreeReader(schema *TypeDescription, m streamMap, r *Reader) (TreeRead
 			m.get(streamName{id, proto.Stream_SECONDARY}),
 			encoding,
 		)
-	// case CategoryBinary:
+	case CategoryBinary:
+		return NewBinaryTreeReader(
+			m.get(streamName{id, proto.Stream_PRESENT}),
+			m.get(streamName{id, proto.Stream_DATA}),
+			m.get(streamName{id, proto.Stream_SECONDARY}),
+			encoding,
+		)
 	// case CategoryDecimal:
 	case CategoryList:
 		if len(schema.children) != 1 {

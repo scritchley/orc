@@ -76,8 +76,8 @@ func TestWriteReadBytes(t *testing.T) {
 	}
 	r := NewRunLengthByteReader(&buf)
 	var index int
-	for r.HasNext() {
-		b := r.NextByte()
+	for r.Next() {
+		b := r.Byte()
 		if input[index] != b {
 			t.Errorf("Test failed, %v does not equal %v at index %v", b, input[index], index)
 		}

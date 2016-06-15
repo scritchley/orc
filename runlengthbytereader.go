@@ -41,11 +41,11 @@ func (b *RunLengthByteReader) ReadByte() (byte, error) {
 	return b.r.ReadByte()
 }
 
-func (b *RunLengthByteReader) HasNext() bool {
+func (b *RunLengthByteReader) Next() bool {
 	return b.used != b.numLiterals || b.available() == nil
 }
 
-func (b *RunLengthByteReader) NextByte() byte {
+func (b *RunLengthByteReader) Byte() byte {
 	var result byte
 	if b.used == b.numLiterals {
 		err := b.readValues()
@@ -90,8 +90,8 @@ func (b *RunLengthByteReader) readValues() error {
 	return nil
 }
 
-func (b *RunLengthByteReader) Next() interface{} {
-	return b.NextByte()
+func (b *RunLengthByteReader) Value() interface{} {
+	return b.Byte()
 }
 
 func (b *RunLengthByteReader) Err() error {
