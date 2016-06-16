@@ -43,5 +43,8 @@ func (b *BooleanReader) Value() interface{} {
 }
 
 func (b *BooleanReader) Err() error {
-	return b.err
+	if b.err != nil {
+		return b.err
+	}
+	return b.RunLengthByteReader.Err()
 }
