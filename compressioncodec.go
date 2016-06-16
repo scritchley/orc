@@ -1,10 +1,11 @@
 package orc
 
 import (
+	"bytes"
 	"compress/flate"
 	"encoding/binary"
-	"fmt"
 	"io"
+	"io/ioutil"
 
 	"github.com/golang/snappy"
 )
@@ -60,7 +61,7 @@ func (c *CompressionZlibDecoder) readHeader() (int, error) {
 		return 0, err
 	}
 	headerVal := binary.LittleEndian.Uint32(header)
-	c.isOriginal = headerVal%1 == 1
+	c.isOriginal = headerVal%2 == 1
 	c.chunkLength = int(headerVal / 2)
 	if !c.isOriginal {
 		c.decoded = flate.NewReader(io.LimitReader(c.source, int64(c.chunkLength)))
@@ -111,11 +112,23 @@ func (c *CompressionSnappyDecoder) readHeader() (int, error) {
 		return 0, err
 	}
 	headerVal := binary.LittleEndian.Uint32(header)
-	c.isOriginal = headerVal%1 == 1
+	c.isOriginal = headerVal%2 == 1
 	c.chunkLength = int(headerVal / 2)
-	fmt.Println(c.isOriginal, c.chunkLength)
 	if !c.isOriginal {
-		c.decoded = snappy.NewReader(io.LimitReader(c.source, int64(c.chunkLength)))
+		// ORC does not use snappy's framing as implemented in the
+		// github.com/golang/snappy Reader implementation. As a result
+		// we have to read and decompress the entire chunk.
+		// TODO: find reader implementation with optional framing.
+		r := io.LimitReader(c.source, int64(c.chunkLength))
+		src, err := ioutil.ReadAll(r)
+		if err != nil {
+			return 0, err
+		}
+		decodedBytes, err := snappy.Decode(nil, src)
+		if err != nil {
+			return 0, err
+		}
+		c.decoded = bytes.NewReader(decodedBytes)
 	} else {
 		c.decoded = io.LimitReader(c.source, int64(c.chunkLength))
 	}
@@ -127,7 +140,7 @@ func (c *CompressionSnappyDecoder) Read(p []byte) (int, error) {
 		return c.readHeader()
 	}
 	n, err := c.decoded.Read(p)
-	if err == io.EOF {
+	if err == io.EOF || err == snappy.ErrCorrupt {
 		c.decoded = nil
 		return n, nil
 	}
