@@ -58,21 +58,21 @@ var (
 	}
 )
 
-type StringPosition struct {
+type stringPosition struct {
 	value    string
 	position int
 	length   int
 }
 
-func NewStringPosition(value string) StringPosition {
-	return StringPosition{
+func NewStringPosition(value string) stringPosition {
+	return stringPosition{
 		value,
 		0,
 		utf8.RuneCountInString(value),
 	}
 }
 
-func (s StringPosition) String() string {
+func (s stringPosition) String() string {
 	var buf bytes.Buffer
 	buf.WriteString(`\'`)
 	buf.WriteString(string([]rune(s.value)[0:s.position]))
@@ -82,7 +82,7 @@ func (s StringPosition) String() string {
 	return buf.String()
 }
 
-func (s *StringPosition) parseCategory() (Category, error) {
+func (s *stringPosition) parseCategory() (Category, error) {
 	start := s.position
 	for s.position < s.length {
 		ch := []rune(s.value)[s.position]
@@ -103,7 +103,7 @@ func (s *StringPosition) parseCategory() (Category, error) {
 	return Category{}, fmt.Errorf("can't parse category at %v", s.value)
 }
 
-func (s *StringPosition) parseInt() (int, error) {
+func (s *stringPosition) parseInt() (int, error) {
 	start := s.position
 	var result int
 	for s.position < s.length {
@@ -120,7 +120,7 @@ func (s *StringPosition) parseInt() (int, error) {
 	return result, nil
 }
 
-func (s *StringPosition) parseName() (string, error) {
+func (s *stringPosition) parseName() (string, error) {
 	start := s.position
 	for s.position < s.length {
 		ch := []rune(s.value)[s.position]
@@ -135,7 +135,7 @@ func (s *StringPosition) parseName() (string, error) {
 	return string([]rune(s.value)[start:s.position]), nil
 }
 
-func (s *StringPosition) requireChar(required rune) error {
+func (s *stringPosition) requireChar(required rune) error {
 	if s.position >= s.length || []rune(s.value)[s.position] != required {
 		return fmt.Errorf("Missing required char '%s'", string(required))
 	}
@@ -143,7 +143,7 @@ func (s *StringPosition) requireChar(required rune) error {
 	return nil
 }
 
-func (s *StringPosition) consumeChar(ch rune) bool {
+func (s *stringPosition) consumeChar(ch rune) bool {
 	result := s.position < s.length && []rune(s.value)[s.position] == ch
 	if result {
 		s.position += 1
@@ -151,7 +151,7 @@ func (s *StringPosition) consumeChar(ch rune) bool {
 	return result
 }
 
-func (s *StringPosition) parseUnion(ty *TypeDescription) error {
+func (s *stringPosition) parseUnion(ty *TypeDescription) error {
 	err := s.requireChar('<')
 	if err != nil {
 		return err
@@ -175,7 +175,7 @@ func (s *StringPosition) parseUnion(ty *TypeDescription) error {
 	return nil
 }
 
-func (s *StringPosition) parseStruct(ty *TypeDescription) error {
+func (s *stringPosition) parseStruct(ty *TypeDescription) error {
 	err := s.requireChar('<')
 	if err != nil {
 		return err
@@ -207,7 +207,7 @@ func (s *StringPosition) parseStruct(ty *TypeDescription) error {
 	return nil
 }
 
-func (s *StringPosition) parseType() (*TypeDescription, error) {
+func (s *stringPosition) parseType() (*TypeDescription, error) {
 	var err error
 	cat, err := s.parseCategory()
 	if err != nil {
@@ -321,11 +321,11 @@ func (s *StringPosition) parseType() (*TypeDescription, error) {
 }
 
 const (
-	MaxPrecision     = 38
-	MaxScale         = 38
-	DefaultPrecision = 38
-	DefaultScale     = 10
-	DefaultLength    = 256
+	maxPrecision     = 38
+	maxScale         = 38
+	defaultPrecision = 38
+	defaultScale     = 10
+	defaultLength    = 256
 )
 
 type TypeDescription struct {
@@ -346,9 +346,9 @@ func NewTypeDescription(fns ...TypeDescriptionTransformFunc) (*TypeDescription, 
 	t := &TypeDescription{
 		id:        -1,
 		maxId:     -1,
-		maxLength: DefaultLength,
-		precision: DefaultPrecision,
-		scale:     DefaultScale,
+		maxLength: defaultLength,
+		precision: defaultPrecision,
+		scale:     defaultScale,
 	}
 	for _, fn := range fns {
 		err := fn(t)
@@ -435,7 +435,7 @@ func (t *TypeDescription) withMaxLength(maxLength int) error {
 func (t *TypeDescription) withScale(scale int) error {
 	if t.category.name != CategoryDecimal.name {
 		return fmt.Errorf("scale is only allowed on decimal and not %s", t.category.name)
-	} else if scale < 0 || scale > MaxScale || scale > t.precision {
+	} else if scale < 0 || scale > maxScale || scale > t.precision {
 		return fmt.Errorf("scale is out of range at %v", scale)
 	}
 	t.scale = scale
@@ -445,11 +445,15 @@ func (t *TypeDescription) withScale(scale int) error {
 func (t *TypeDescription) withPrecision(precision int) error {
 	if t.category.name != CategoryDecimal.name {
 		return fmt.Errorf("precision is only allowed on decimal and not %s", t.category.name)
-	} else if precision < 1 || precision > MaxPrecision || t.scale > precision {
+	} else if precision < 1 || precision > maxPrecision || t.scale > precision {
 		return fmt.Errorf("precision %v is out of range of 1 .. %v", precision, t.scale)
 	}
 	t.precision = precision
 	return nil
+}
+
+func (t *TypeDescription) Columns() []string {
+	return t.fieldNames
 }
 
 func (t *TypeDescription) getID() int {

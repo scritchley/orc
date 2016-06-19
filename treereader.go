@@ -3,6 +3,7 @@ package orc
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -12,7 +13,7 @@ import (
 )
 
 var (
-	unsupportedFormat = fmt.Errorf("unsupported format")
+	unsupportedFormat = errors.New("unsupported format")
 )
 
 type ValueReader interface {
@@ -459,7 +460,7 @@ func (m *MapTreeReader) Value() interface{} {
 }
 
 func NewMapTreeReader(present, length io.Reader, key, value TreeReader, encoding *proto.ColumnEncoding) (*MapTreeReader, error) {
-	lengthReader, err := createIntegerReader(encoding.GetKind(), length, false, false)
+	lengthReader, err := createIntegerReader(encoding.GetKind(), length, true, false)
 	if err != nil {
 		return nil, err
 	}
@@ -478,7 +479,7 @@ type ListTreeReader struct {
 }
 
 func (r *ListTreeReader) Next() bool {
-	return r.length.Next() && r.value.Next()
+	return r.BaseTreeReader.Next() && r.length.Next() && r.value.Next()
 }
 
 func (r *ListTreeReader) List() []interface{} {
@@ -487,6 +488,9 @@ func (r *ListTreeReader) List() []interface{} {
 	for i := range ls {
 		ls[i] = r.value.Value()
 		if !r.value.Next() {
+			if err := r.Err(); err != nil {
+				r.err = err
+			}
 			break
 		}
 	}
@@ -508,7 +512,7 @@ func (r *ListTreeReader) Err() error {
 }
 
 func NewListTreeReader(present, length io.Reader, value TreeReader, encoding *proto.ColumnEncoding) (*ListTreeReader, error) {
-	lengthReader, err := createIntegerReader(encoding.GetKind(), length, false, false)
+	lengthReader, err := createIntegerReader(encoding.GetKind(), length, true, false)
 	if err != nil {
 		return nil, err
 	}

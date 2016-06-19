@@ -19,8 +19,7 @@ var (
 )
 
 const (
-	DirectorySizeGuess int64 = 16 * 1024
-	MaxPostScriptSize        = 256
+	maxPostScriptSize = 256
 )
 
 type SizedReaderAt interface {
@@ -68,10 +67,14 @@ func (r *Reader) getCodec() (CompressionCodec, error) {
 	}
 }
 
+func (r *Reader) Schema() *TypeDescription {
+	return r.schema
+}
+
 func (r *Reader) extractMetaInfoFromFooter() error {
 
 	size := int(r.r.Size())
-	psPlusByte := MaxPostScriptSize + 1
+	psPlusByte := maxPostScriptSize + 1
 
 	// Read the last 256 bytes into buffer to get postscript
 	postScriptBytes := make([]byte, psPlusByte, psPlusByte)

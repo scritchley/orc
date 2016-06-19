@@ -29,11 +29,11 @@ var (
 	Version0_12 = Version{"0.12", 0, 12}
 )
 
-type FileReader struct {
+type fileReader struct {
 	*os.File
 }
 
-func (f FileReader) Size() int64 {
+func (f fileReader) Size() int64 {
 	stats, err := f.Stat()
 	if err != nil {
 		return 0
@@ -46,5 +46,5 @@ func Open(name string) (*Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewReader(FileReader{f})
+	return NewReader(fileReader{f})
 }

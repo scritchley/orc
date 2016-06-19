@@ -1,6 +1,7 @@
 package orc
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 
@@ -33,4 +34,18 @@ type streamName struct {
 
 func (s streamName) String() string {
 	return fmt.Sprintf("col:%v kind:%s", s.columnID, s.kind)
+}
+
+type streamWriterMap map[streamName]io.Writer
+
+func (s streamWriterMap) reset() {
+	for k := range s {
+		delete(s, k)
+	}
+}
+
+func (s streamWriterMap) create(name streamName) io.Writer {
+	var stream bytes.Buffer
+	s[name] = &stream
+	return &stream
 }

@@ -1,10 +1,10 @@
 package orc
 
 const (
-	Null        = -1
-	LeftOffset  = 0
-	RightOffset = 1
-	ElementSize = 2
+	null        = -1
+	leftOffset  = 0
+	rightOffset = 1
+	elementSize = 2
 )
 
 type RedBlackTree struct {
@@ -18,8 +18,8 @@ type RedBlackTree struct {
 
 func NewRedBlackTree(initialCapacity int) *RedBlackTree {
 	return &RedBlackTree{
-		data: NewDynamicIntSlice(initialCapacity * ElementSize),
-		root: Null,
+		data: NewDynamicIntSlice(initialCapacity * elementSize),
+		root: null,
 	}
 }
 
@@ -32,11 +32,11 @@ func (r *RedBlackTree) insert(left int, right int, isRed bool) int {
 }
 
 func (r *RedBlackTree) isRed(position int) bool {
-	return position != Null && (r.data.get(position*ElementSize+LeftOffset)&1) == 1
+	return position != null && (r.data.get(position*elementSize+leftOffset)&1) == 1
 }
 
 func (r *RedBlackTree) setRed(position int, isRed bool) {
-	offset := position*ElementSize + LeftOffset
+	offset := position*elementSize + leftOffset
 	if isRed {
 		r.data.set(offset, r.data.get(offset)|1)
 	} else {
@@ -45,20 +45,20 @@ func (r *RedBlackTree) setRed(position int, isRed bool) {
 }
 
 func (r *RedBlackTree) getLeft(position int) int {
-	return r.data.get(position*ElementSize+LeftOffset) >> 1
+	return r.data.get(position*elementSize+leftOffset) >> 1
 }
 
 func (r *RedBlackTree) getRight(position int) int {
-	return r.data.get(position*ElementSize + RightOffset)
+	return r.data.get(position*elementSize + rightOffset)
 }
 
 func (r *RedBlackTree) setLeft(position int, left int) {
-	offset := position*ElementSize + LeftOffset
+	offset := position*elementSize + leftOffset
 	r.data.set(offset, (left<<1)|(r.data.get(offset)&1))
 }
 
 func (r *RedBlackTree) setLeftRed(position int, left int, isRed bool) {
-	offset := position*ElementSize + LeftOffset
+	offset := position*elementSize + leftOffset
 	var red int
 	if isRed {
 		red = 1
@@ -67,18 +67,18 @@ func (r *RedBlackTree) setLeftRed(position int, left int, isRed bool) {
 }
 
 func (r *RedBlackTree) setRight(position int, right int) {
-	r.data.set(position*ElementSize+RightOffset, right)
+	r.data.set(position*elementSize+rightOffset, right)
 }
 
 func (r *RedBlackTree) add(node int, fromLeft bool, parent int, grandParent int, greatGrandparent int) bool {
-	if node == Null {
-		if r.root == Null {
-			r.lastAdd = r.insert(Null, Null, false)
+	if node == null {
+		if r.root == null {
+			r.lastAdd = r.insert(null, null, false)
 			r.root = r.lastAdd
 			r.wasAdd = true
 			return false
 		} else {
-			r.lastAdd = r.insert(Null, Null, true)
+			r.lastAdd = r.insert(null, null, true)
 			node = r.lastAdd
 			r.wasAdd = true
 			// connect the new node into the tree
@@ -131,7 +131,7 @@ func (r *RedBlackTree) add(node int, fromLeft bool, parent int, grandParent int,
 				r.setRed(parent, false)
 				r.setRed(grandParent, true)
 				// right-rotate on grandparent
-				if greatGrandparent == Null {
+				if greatGrandparent == null {
 					r.root = parent
 				} else if r.getLeft(greatGrandparent) == grandParent {
 					r.setLeft(greatGrandparent, parent)
@@ -167,7 +167,7 @@ func (r *RedBlackTree) add(node int, fromLeft bool, parent int, grandParent int,
 				r.setRed(parent, false)
 				r.setRed(grandParent, true)
 				// left-rotate on grandparent
-				if greatGrandparent == Null {
+				if greatGrandparent == null {
 					r.root = parent
 				} else if r.getRight(greatGrandparent) == grandParent {
 					r.setRight(greatGrandparent, parent)
@@ -185,7 +185,7 @@ func (r *RedBlackTree) add(node int, fromLeft bool, parent int, grandParent int,
 }
 
 func (r *RedBlackTree) Add() bool {
-	r.add(r.root, false, Null, Null, Null)
+	r.add(r.root, false, null, null, null)
 	if r.wasAdd {
 		r.setRed(r.root, false)
 		return true
@@ -199,7 +199,7 @@ func (r *RedBlackTree) Size() int {
 }
 
 func (r *RedBlackTree) clear() {
-	r.root = Null
+	r.root = null
 	r.size = 0
 	r.data.clear()
 }

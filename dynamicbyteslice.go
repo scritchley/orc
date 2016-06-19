@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	DefaultByteArrayChunkSize = 32 * 1024
-	DefaultNumChunks          = 128
+	defaultByteArrayChunkSize = 32 * 1024
+	defaultNumChunks          = 128
 )
 
 type DynamicByteSlice struct {

@@ -14,7 +14,7 @@ func NewStringRedBlackTree(initialCapacity int) *StringRedBlackTree {
 	srbt := &StringRedBlackTree{
 		RedBlackTree: rbt,
 		keyOffsets:   NewDynamicIntSlice(initialCapacity),
-		byteArray:    NewDynamicByteSlice(DefaultByteArrayChunkSize, DefaultNumChunks),
+		byteArray:    NewDynamicByteSlice(defaultByteArrayChunkSize, defaultNumChunks),
 	}
 	rbt.CompareValue = srbt.compareValue
 	return srbt

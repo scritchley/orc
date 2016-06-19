@@ -7,8 +7,8 @@ import (
 )
 
 var (
-	ErrEOFUnsignedVInt = fmt.Errorf("EOF while reading unsigned vint")
-	ErrCorrupt         = fmt.Errorf("ORC file is corrupt")
+	ErrEOFUnsignedVInt = errors.New("EOF while reading unsigned vint")
+	ErrCorrupt         = errors.New("ORC file is corrupt")
 )
 
 const (

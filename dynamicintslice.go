@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	DefaultChunkSize = 8 * 1024
-	InitChunks       = 128
+	defaultChunkSize = 8 * 1024
+	initChunks       = 128
 )
 
 type DynamicIntSlice struct {
@@ -20,7 +20,7 @@ type DynamicIntSlice struct {
 func NewDynamicIntSlice(chunkSize int) *DynamicIntSlice {
 	return &DynamicIntSlice{
 		chunkSize: chunkSize,
-		data:      make([][]int, InitChunks, InitChunks),
+		data:      make([][]int, initChunks, initChunks),
 	}
 }
 

@@ -99,6 +99,10 @@ func (c *Cursor) next() bool {
 func (c *Cursor) Row() []interface{} {
 	s := make([]interface{}, len(c.readers), len(c.readers))
 	for i, reader := range c.readers {
+		if !reader.IsPresent() {
+			s[i] = nil
+			continue
+		}
 		s[i] = reader.Value()
 	}
 	return s
