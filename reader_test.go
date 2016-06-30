@@ -7,12 +7,12 @@ import (
 
 func TestReader(t *testing.T) {
 
-	r, err := Open("./examples/billing2.orc")
+	r, err := Open("./examples/orc-file-11-format.orc")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer r.Close()
-	c := r.Select("_col15")
+	c := r.Select("boolean1")
 	row := 0
 	for c.Stripes() {
 		for c.Next() {
