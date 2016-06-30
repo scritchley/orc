@@ -380,10 +380,7 @@ func (r *Reader) createSchema(types []*proto.Type, rootColumn int) (*TypeDescrip
 		}
 		subTypes := root.GetSubtypes()
 		fieldNames := root.GetFieldNames()
-		if len(subTypes) != len(fieldNames) {
-			return nil, fmt.Errorf("unexpected number of subtypes:%v does not match fieldnames:%v", len(subTypes), len(fieldNames))
-		}
-		for f := 0; f < len(subTypes); f++ {
+		for f := 0; f < len(fieldNames); f++ {
 			child, err := r.createSchema(types, int(subTypes[f]))
 			if err != nil {
 				return nil, err
