@@ -1194,11 +1194,11 @@ func bytesToLongBE(r io.ByteReader, n int) (int64, error) {
 // zigzagEncode encodes a signed integer using zig-zag encoding returning
 // an unsigned integer.
 func zigzagEncode(i int64) uint64 {
-	return uint64(((i >> 31) ^ (i << 1)))
+	return uint64((uint64(i) << 1) ^ uint64((int64(i) >> 63)))
 }
 
 // zigzagDecode decodes an unsigned zig-zag encoded integer into a signed
 // integer.
 func zigzagDecode(i uint64) int64 {
-	return int64((i >> 1) ^ (-(i & 1)))
+	return int64((i >> 1) ^ uint64((int64(i&1)<<63)>>63))
 }
