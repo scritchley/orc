@@ -20,8 +20,8 @@ const (
 
 type Version struct {
 	name  string
-	major int
-	minor int
+	major uint32
+	minor uint32
 }
 
 var (

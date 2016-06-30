@@ -36,6 +36,17 @@ func TestRunLengthIntegerWriterV2(t *testing.T) {
 			},
 		},
 		{
+			// Direct
+			signed: false,
+			input:  []int64{23713, 43806, 57005, 48879},
+			expect: func(output []byte) {
+				expected := []byte{0x5e, 0x03, 0x5c, 0xa1, 0xab, 0x1e, 0xde, 0xad, 0xbe, 0xef}
+				if !reflect.DeepEqual(output, expected) {
+					t.Errorf("Test failed, expected %v to equal %v", output, expected)
+				}
+			},
+		},
+		{
 			// Delta
 			signed: false,
 			input:  []int64{2, 3, 5, 7, 11, 13, 17, 19, 23, 29},
@@ -92,7 +103,7 @@ func TestWriteReadRunLengthIntegerWriterV2(t *testing.T) {
 	w := NewRunLengthIntegerWriterV2(&buf, true)
 	var input []int64
 	for i := 0; i < 1000000; i++ {
-		b := rand.Int63n(1000000)
+		b := rand.Int63()
 		input = append(input, b)
 		err := w.WriteInt(b)
 		if err != nil {
@@ -120,7 +131,7 @@ func TestWriteReadRunLengthIntegerWriterV2Run(t *testing.T) {
 	w := NewRunLengthIntegerWriterV2(&buf, false)
 	var input []int64
 	for i := 0; i < 1000000; i++ {
-		b := rand.Int63n(10)
+		b := rand.Int63()
 		input = append(input, b)
 		err := w.WriteInt(b)
 		if err != nil {

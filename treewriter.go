@@ -1,251 +1,442 @@
 package orc
 
-// import (
-// 	"io"
+import (
+	"bufio"
+	"bytes"
+	"encoding/binary"
+	"fmt"
+	"io"
+	"math"
 
-// 	"code.simon-critchley.co.uk/orc/proto"
-// )
+	"code.simon-critchley.co.uk/orc/proto"
+)
 
-// type RowIndexPositionRecorder interface{}
-// type BloomFilterIO interface{}
+// BufferedWriter wraps a *bufio.Writer and records the current
+// position of the writer prior to flushing to the underlying.
+type BufferedWriter struct {
+	*bufio.Writer
+	*bytes.Buffer
+	written uint64
+}
 
-// type TreeWriter struct {
-// 	*Writer
-// 	id                  int
-// 	isPresent           *BooleanWriter
-// 	isCompressed        bool
-// 	indexStatistics     *ColumnStatistics
-// 	stripeColStatistics *ColumnStatistics
-// 	fileStatistics      *ColumnStatistics
-// 	childrenWriters     []*TreeWriter
-// 	rowIndexPosition    RowIndexPositionRecorder
-// 	rowIndex            *proto.RowIndex
-// 	rowIndexEntry       *proto.RowIndexEntry
-// 	rowIndexStream      io.Writer
-// 	bloomFilterStream   io.Writer
-// 	bloomFilter         BloomFilterIO
-// 	createBloomFilter   bool
-// 	bloomFilterIndex    *proto.BloomFilterIndex
-// 	bloomFilterEntry    *proto.BloomFilter
-// 	foundNulls          bool
-// 	isPresentOutStream  io.Writer
-// 	stripeStatsBuilders []*proto.StripeStatistics
-// }
+// NewBufferedWriter returns a new BufferedWriter using the provided
+// CompressionCodec.
+func NewBufferedWriter(codec CompressionCodec) *BufferedWriter {
+	buf := &bytes.Buffer{}
+	return &BufferedWriter{
+		Writer: bufio.NewWriterSize(
+			codec.Encoder(buf),
+			int(2*DefaultCompressionChunkSize),
+		),
+		Buffer: buf,
+	}
+}
 
-// func NewTreeWriter(columnID int, schema TypeDescription, w *Writer, nullable bool) (*TreeWriter, error) {
-// 	tw := &TreeWriter{
-// 		Writer:       w,
-// 		isCompressed: w.isCompressed(),
-// 		id:           columnID,
-// 	}
-// 	if nullable {
-// 		tw.isPresentOutStream = w.createStream(columnID, proto.Stream_PRESENT)
-// 		tw.isPresent = NewBooleanWriter(tw.isPresentOutStream)
-// 	}
-// 	tw.foundNulls = false
-// 	tw.createBloomFilter = w.getBloomFilterColumns()[columnID]
-// 	tw.indexStatistics = NewColumnStatistics(schema)
-// 	tw.stripeColStatistics = NewColumnStatistics(schema)
-// 	tw.fileStatistics = NewColumnStatistics(schema)
-// 	tw.childrenWriters = make([]*TreeWriter, 0)
-// 	tw.rowIndex = &proto.RowIndex{}
-// 	tw.rowIndexEntry = &proto.RowIndexEntry{}
-// 	tw.rowIndexPosition = NewRowIndexPositionRecorder(tw.rowIndexEntry)
-// 	if w.buildIndex() {
-// 		tw.rowIndexStream = w.createStream(tw.id, proto.Stream_ROW_INDEX)
-// 	}
-// 	if tw.createBloomFilter {
-// 		tw.bloomFilterEntry = &proto.BloomFilter{}
-// 		tw.bloomFilterEntry = &proto.BloomFilterIndex{}
-// 		tw.bloomFilterStream = w.createStream(tw.id, proto.Stream_BLOOM_FILTER)
-// 		tw.bloomFilter = NewBloomFilterIO(w.getRowIndexStride(), w.getBloomFilterFPP())
-// 	}
-// 	return tw, nil
-// }
+// WriteByte writes a byte to the underlying buffer an increments the total
+// number of bytes written.
+func (b *BufferedWriter) WriteByte(c byte) error {
+	b.written++
+	return b.Writer.WriteByte(c)
+}
 
-// func (tw *TreeWriter) getRowIndex() *proto.RowIndex {
-// 	return tw.rowIndex
-// }
+// Write writes the provided byte slice to the underlying buffer an increments
+// the total number of bytes written.
+func (b *BufferedWriter) Write(p []byte) (int, error) {
+	b.written += uint64(len(p))
+	return b.Writer.Write(p)
+}
 
-// func (tw *TreeWriter) getStripeStatistics() *ColumnStatistics {
-// 	return tw.stripeColStatistics
-// }
+// Position returns the number of bytes written to the underlying io.Writer
+// not including the buffered bytes.
+func (b *BufferedWriter) Position() uint64 {
+	return b.written - uint64(b.Buffered())
+}
 
-// func (tw *TreeWriter) getRowIndexEntry() *proto.RowIndexEntry {
-// 	return tw.rowIndexEntry
-// }
+// Len returns the number of bytes that have been written to the buffered
+// writer, including bytes that have been buffered but not flushed to the
+// underlying writer.
+func (b *BufferedWriter) Len() uint64 {
+	return b.written + uint64(b.Buffered())
+}
 
-// func (tw *TreeWriter) createIntegerWriter(w io.ByteWriter, signed bool, isDirectV2 bool) IntegerWriter {
-// 	if isDirectV2 {
-// 		alignedBitPacking := false
-// 		if w.getEncodingStrategy() == EncodingStrategySpeed {
-// 			alignedBitPacking = true
-// 		}
-// 		return NewRunLengthIntegerWriterV2(w, signed, alignedBitPacking)
-// 	}
-// 	return NewRunLengthIntegerWriter(w, signed)
-// }
+// Close flushes any buffered bytes to the underlying writer.
+func (b *BufferedWriter) Close() error {
+	return b.Writer.Flush()
+}
 
-// func (tw *TreeWriter) isNewWriteFormat(w *Writer) bool {
-// 	return w.getVersion() != ORCFileVersionV_0_11
-// }
+// TreeWriter is an interface for writing to a stream.
+type TreeWriter interface {
+	// ColumnEncoding returns the column encoding used for the TreeWriter.
+	ColumnEncoding() *proto.ColumnEncoding
+	// Write writes the interface value i to the TreeWriter, it returns an error
+	// if i is of an unexpected type or if an error occurs whilst writing to
+	// the underlying stream.
+	Write(i interface{}) error
+	// Close flushes the remaining data and closes the writer.
+	Close() error
+	// Flush flushes any outstanding data to the underlying writer.
+	Flush() error
+}
 
-// func (tw *TreeWriter) writeRootBatch(batch VectorizedRowBatch, offset int, length int) error {
-// 	return tw.writeBatch(batch.cols[0], offset, length)
-// }
+// BaseTreeWriter is a TreeWriter implementation that writes to the present stream. It
+// is the basis for all other TreeWriter implementations.
+type BaseTreeWriter struct {
+	*BooleanWriter
+	*BufferedWriter
+	statistics      ColumnStatistics
+	indexStatistics ColumnStatistics
+}
 
-// func (tw *TreeWriter) writeBatch(vector ColumnVector, offset int, length int) error {
-// 	if vector.noNulls {
-// 		tw.indexStatistics.increment(length)
-// 		if tw.isPresent != nil {
-// 			for i := 0; i < length; i++ {
-// 				err := tw.isPresent.WriteBool(true)
-// 				if err != nil {
-// 					return err
-// 				}
-// 			}
-// 		}
-// 	} else {
-// 		if vector.isRepeating {
-// 			isNull := vector.isNull[0]
-// 			if tw.isPresent != nil {
-// 				for i := 0; i < length; i++ {
-// 					err := tw.isPresent.WriteBool(!isNull)
-// 					if err != nil {
-// 						return err
-// 					}
-// 				}
-// 			}
-// 			if isNull {
-// 				tw.foundNulls = true
-// 				tw.indexStatistics.setNull()
-// 			} else {
-// 				tw.indexStatistics.increment(length)
-// 			}
-// 		} else {
-// 			var nonNullCount int
-// 			for i := 0; i < length; i++ {
-// 				isNull := vector.isNull[i+offset]
-// 				if !isNull {
-// 					nonNullCount++
-// 				}
-// 				if tw.isPresent != nil {
-// 					err := tw.isPresent.WriteBool(!isNull)
-// 					if err != nil {
-// 						return err
-// 					}
-// 				}
-// 			}
-// 			tw.indexStatistics.increment(nonNullCount)
-// 			if nonNullCount != length {
-// 				tw.foundNulls = true
-// 				tw.indexStatistics.setNull()
-// 			}
-// 		}
-// 	}
-// }
+// NewBaseTreeWriter is a TreeWriter that writes to a present stream.
+func NewBaseTreeWriter(isPresent *BufferedWriter, statistics, indexStatistics ColumnStatistics) BaseTreeWriter {
+	// Create a buffered writer.
+	return BaseTreeWriter{
+		BooleanWriter:   NewBooleanWriter(isPresent),
+		BufferedWriter:  isPresent,
+		statistics:      statistics,
+		indexStatistics: indexStatistics,
+	}
+}
 
-// func (tw *TreeWriter) removeIsPresentPositions() {
-// 	for _, entry := range tw.rowIndex.GetEntry() {
-// 		positions := entry.GetPositions()
-// 		offset := 3
-// 		// bit streams use 3 positions if uncompressed, 4 if compressed
-// 		if tw.isCompressed {
-// 			offset = 4
-// 		}
-// 		entry.Positions = positions[offset:]
-// 	}
-// }
+// Write checks whether i is nil and writes an appropriate true or false value to
+// the underlying isPresent stream.
+func (b BaseTreeWriter) Write(i interface{}) error {
+	// Add the value to the statistics
+	b.statistics.Add(i)
+	b.indexStatistics.Add(i)
+	// isPresent is optional, therefore, support nil BooleanWriter
+	if b.BooleanWriter == nil {
+		return nil
+	}
+	if i == nil {
+		// If interface value is nil, then write false to isPresent stream.
+		return b.BooleanWriter.WriteBool(false)
+	}
+	// Otherwise write a true value to the isPresent stream.
+	return b.BooleanWriter.WriteBool(true)
+}
 
-// func (tw *TreeWriter) writeStripe(footer *proto.StripeFooter, requiredIndexEntries int) error {
-// 	if tw.isPresent != nil {
-// 		err := tw.isPresent.Flush()
-// 		if err != nil {
-// 			return err
-// 		}
-// 		// if no nulls are found in a stream, then suppress the stream
-// 		if !tw.foundNulls {
-// 			tw.isPresentOutStream.suppress()
-// 			// since isPresent bitstream is suppressed, update the index to
-// 			// remove the positions of the isPresent stream
-// 			if tw.rowIndexStream != nil {
-// 				tw.removeIsPresentPositions()
-// 			}
-// 		}
-// 	}
+// Close flushes the underlying BufferedWriter returning an error if one occurs.
+func (b BaseTreeWriter) Close() error {
+	if err := b.BooleanWriter.Close(); err != nil {
+		return err
+	}
+	return b.BufferedWriter.Close()
+}
 
-// 	// merge stripe-level column statistics to file statistics and write it to
-// 	// stripe statistics
-// 	stripeStats := &proto.StripeStatistics{}
-// 	tw.writeStripeStatistics(stripeStats)
-// 	tw.stripeStatsBuilders = append(tw.stripeStatsBuilders, stripeStats)
+// Flush flushes the underlying BufferedWriter returning an error if one occurs.
+func (b BaseTreeWriter) Flush() error {
+	if err := b.BooleanWriter.Flush(); err != nil {
+		return err
+	}
+	return b.BufferedWriter.Flush()
+}
 
-// 	// reset the flag for next stripe
-// 	tw.foundNulls = false
+// IntegerWriter is an interface implemented by all integer type writers.
+type IntegerWriter interface {
+	WriteInt(value int64) error
+	Close() error
+	Flush() error
+}
 
-// 	footer.Columns = append(footer.Columns, tw.getEncoding())
-// 	if w.hasWriterTimezone() {
-// 		footer.WriterTimezone = w.getTimezone()
-// 	}
-// 	if tw.rowIndexStream != nil {
-// 		if l := len(tw.rowIndex.GetEntry()); l != requiredIndexEntries {
-// 			return fmt.Errorf("Column has wrong number of index entries found: %v expected: %v", l, requiredIndexEntries)
-// 		}
-// 		err := writeProto(tw.rowIndex, tw.rowIndexStream)
-// 		if err != nil {
-// 			return err
-// 		}
-// 	}
-// 	tw.rowIndex.Reset()
-// 	tw.rowIndexEntry.Reset()
-// 	if tw.bloomFilterStream != nil {
-// 		err := writeProto(tw.bloomFilterIndex, tw.bloomFilterStream)
-// 		if err != nil {
-// 			return err
-// 		}
-// 		tw.bloomFilterIndex.Reset()
-// 		tw.bloomFilterEntry.Reset()
-// 	}
-// }
+func createIntegerWriter(kind proto.ColumnEncoding_Kind, w io.ByteWriter, signed bool) (IntegerWriter, error) {
+	switch kind {
+	case proto.ColumnEncoding_DIRECT_V2, proto.ColumnEncoding_DICTIONARY_V2:
+		return NewRunLengthIntegerWriterV2(w, signed), nil
+	case proto.ColumnEncoding_DIRECT, proto.ColumnEncoding_DICTIONARY:
+		return NewRunLengthIntegerWriter(w, signed), nil
+	default:
+		return nil, fmt.Errorf("unknown encoding: %s", kind)
+	}
+}
 
-// func (tw *TreeWriter) writeStripeStatistics(stats *proto.StripeStatistics, t *TreeWriter) {
-// 	t.fileStatistics.merge(t.stripeColStatistics)
-// 	stats.ColStats = append(stats.ColStats, t.stripeColStatistics)
-// 	for _, child := range t.getChildrenWriters {
-// 		tw.writeStripeStatistics(stats, child)
-// 	}
-// }
+// IntegerTreeWriter is a TreeWriter implementation that writes an integer type column.
+type IntegerTreeWriter struct {
+	BaseTreeWriter
+	IntegerWriter
+	*BufferedWriter
+	encoding *proto.ColumnEncoding
+}
 
-// func (tw *TreeWriter) getChildrenWriters() []*TreeWriter {
-// 	return tw.childrenWriters
-// }
+// NewIntegerTreeWriter returns a new IntegerTreeWriter writing to the provided present and data writers.
+func NewIntegerTreeWriter(present, data *BufferedWriter, statistics, indexStatistics ColumnStatistics) (*IntegerTreeWriter, error) {
+	// TODO: Inherit column encoding kind from orc.Writer ORC file version.
+	iwriter, err := createIntegerWriter(proto.ColumnEncoding_DIRECT_V2, data, true)
+	if err != nil {
+		return nil, err
+	}
+	return &IntegerTreeWriter{
+		BaseTreeWriter: NewBaseTreeWriter(present, statistics, indexStatistics),
+		IntegerWriter:  iwriter,
+		BufferedWriter: data,
+		encoding: &proto.ColumnEncoding{
+			Kind: proto.ColumnEncoding_DIRECT_V2.Enum(),
+		},
+	}, nil
+}
 
-// func (tw *TreeWriter) getEncoding() *proto.ColumnEncoding {
-// 	return newColumnEncoding(proto.ColumnEncoding_DIRECT)
-// }
+// WriteInt writes an integer value returning an error if one occurs.
+func (w *IntegerTreeWriter) WriteInt(value int64) error {
+	return w.IntegerWriter.WriteInt(value)
+}
 
-// func (tw *TreeWriter) createRowIndexEntry() error {
-// 	tw.stripeColStatistics.merge(tw.indexStatistics)
-// 	tw.rowIndexEntry.Statistics = tw.indexStatistics
-// 	tw.indexStatistics.reset()
-// 	tw.rowIndex.Entry = append(tw.rowIndex.Entry, tw.getRowIndexEntry)
-// 	tw.rowIndexEntry.Reset()
-// 	tw.addBloomFilterEntry()
-// 	tw.recordPosition(tw.rowIndexPosition)
-// 	for _, child := range tw.childrenWriters {
-// 		err := child.createRowIndexEntry()
-// 		if err != nil {
-// 			return err
-// 		}
-// 	}
-// }
+// Write writes a value returning an error if one occurs. It accepts any form of
+// integer or a nil value for writing nulls to the stream. Any other types will
+// return an error.
+func (w *IntegerTreeWriter) Write(value interface{}) error {
+	switch t := value.(type) {
+	case nil:
+		// If the value is nil, return with no error. The value is null
+		// and a false value will have been written to the present stream.
+		// First write the value to the present column.
+		if err := w.BaseTreeWriter.Write(value); err != nil {
+			return err
+		}
+		return nil
+	case int:
+		// First write the value to the present column.
+		if err := w.BaseTreeWriter.Write(int64(t)); err != nil {
+			return err
+		}
+		return w.WriteInt(int64(t))
+	case int32:
+		// First write the value to the present column.
+		if err := w.BaseTreeWriter.Write(int64(t)); err != nil {
+			return err
+		}
+		return w.WriteInt(int64(t))
+	case int64:
+		// First write the value to the present column.
+		if err := w.BaseTreeWriter.Write(t); err != nil {
+			return err
+		}
+		return w.WriteInt(t)
+	default:
+		return fmt.Errorf("cannot write %T to integer column type", t)
+	}
+}
 
-// func (tw *TreeWriter) addBloomFilterEntry() {
-// 	if tw.createBloomFilter {
-// 		tw.bloomFilterEntry.NumHashFunctions = tw.bloomFilter.getNumHashFunctions()
-// 		tw.bloomFilterEntry.Bitset = append(tw.bloomFilterEntry.Bitset, tw.bloomFilter.getBitSet()...)
-// 		tw.bloomFilterIndex.BloomFilter = append(tw.bloomFilterIndex.BloomFilter, tw.bloomFilterEntry)
-// 		tw.bloomFilter.reset()
-// 		tw.bloomFilterEntry.Reset()
-// 	}
-// }
+// Close closes the underlying writers returning an error if one occurs.
+func (w *IntegerTreeWriter) Close() error {
+	if err := w.BaseTreeWriter.Close(); err != nil {
+		return err
+	}
+	if err := w.IntegerWriter.Close(); err != nil {
+		return err
+	}
+	return w.BufferedWriter.Close()
+}
+
+// Flush flushes the underlying writers returning an error if one occurs.
+func (w *IntegerTreeWriter) Flush() error {
+	if err := w.BaseTreeWriter.Flush(); err != nil {
+		return err
+	}
+	if err := w.IntegerWriter.Flush(); err != nil {
+		return err
+	}
+	return w.BufferedWriter.Flush()
+}
+
+// ColumnEncoding returns the column encoding used for the IntegerTreeWriter.
+func (w *IntegerTreeWriter) ColumnEncoding() *proto.ColumnEncoding {
+	return w.encoding
+}
+
+// StructTreeWriter is a TreeWriter implementation that can write a struct column type.
+type StructTreeWriter struct {
+	BaseTreeWriter
+	children []TreeWriter
+}
+
+// NewStructTreeWriter returns a StructTreeWriter using the provided io.Writer and children
+// TreeWriters. It additionally returns an error if one occurs.
+func NewStructTreeWriter(present *BufferedWriter, children []TreeWriter, statistics, indexStatistics ColumnStatistics) (*StructTreeWriter, error) {
+	return &StructTreeWriter{
+		BaseTreeWriter: NewBaseTreeWriter(present, statistics, indexStatistics),
+		children:       children,
+	}, nil
+}
+
+// Write writes a value to the underlying child TreeWriters. It returns
+// an error if one occurs.
+func (s *StructTreeWriter) Write(value interface{}) error {
+	// First write the value to the present column.
+	if err := s.BaseTreeWriter.Write(value); err != nil {
+		return err
+	}
+	values, ok := value.([]interface{})
+	if !ok {
+		return fmt.Errorf("wrong type for struct tree reader, expected []interface{}, got:%T", value)
+	}
+	if len(values) != len(s.children) {
+		return fmt.Errorf("wrong number of values, expected:%v, got:%v", len(s.children), len(values))
+	}
+	for i := range s.children {
+		err := s.children[i].Write(values[i])
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Close closes the StructTreeWriter and its child TreeWriters returning an
+// error if one occurs.
+func (s *StructTreeWriter) Close() error {
+	if err := s.BaseTreeWriter.Close(); err != nil {
+		return err
+	}
+	for i := range s.children {
+		err := s.children[i].Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Flush flushes the StructTreeWriter and its child TreeWriters returning an
+// error if one occurs.
+func (s *StructTreeWriter) Flush() error {
+	if err := s.BaseTreeWriter.Flush(); err != nil {
+		return err
+	}
+	for i := range s.children {
+		err := s.children[i].Flush()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ColumnEncoding returns the column encoding for the StructTreeWriter.
+func (s *StructTreeWriter) ColumnEncoding() *proto.ColumnEncoding {
+	return &proto.ColumnEncoding{
+		Kind: proto.ColumnEncoding_DIRECT.Enum(),
+	}
+}
+
+type BooleanTreeWriter struct {
+	BaseTreeWriter
+	*BooleanWriter
+	*BufferedWriter
+}
+
+func NewBooleanTreeWriter(isPresent, data *BufferedWriter, statistics, indexStatistics ColumnStatistics) (*BooleanTreeWriter, error) {
+	return &BooleanTreeWriter{
+		BaseTreeWriter: NewBaseTreeWriter(isPresent, statistics, indexStatistics),
+		BooleanWriter:  NewBooleanWriter(data),
+		BufferedWriter: data,
+	}, nil
+}
+
+func (b *BooleanTreeWriter) Write(value interface{}) error {
+	if value == nil {
+		return b.BaseTreeWriter.Write(value)
+	}
+	if bv, ok := value.(bool); ok {
+		if err := b.BaseTreeWriter.Write(true); err != nil {
+			return err
+		}
+		return b.BooleanWriter.WriteBool(bv)
+	}
+	return fmt.Errorf("expected bool or nil value, received %T", value)
+}
+
+func (b *BooleanTreeWriter) Close() error {
+	if err := b.BaseTreeWriter.Close(); err != nil {
+		return err
+	}
+	if err := b.BooleanWriter.Close(); err != nil {
+		return err
+	}
+	return b.BufferedWriter.Close()
+}
+
+func (b *BooleanTreeWriter) Flush() error {
+	if err := b.BaseTreeWriter.Flush(); err != nil {
+		return err
+	}
+	if err := b.BooleanWriter.Flush(); err != nil {
+		return err
+	}
+	return b.BufferedWriter.Flush()
+}
+
+func (b *BooleanTreeWriter) ColumnEncoding() *proto.ColumnEncoding {
+	return &proto.ColumnEncoding{
+		Kind: proto.ColumnEncoding_DIRECT.Enum(),
+	}
+}
+
+type FloatTreeWriter struct {
+	BaseTreeWriter
+	*BufferedWriter
+	bytesPerValue int
+}
+
+func NewFloatTreeWriter(isPresent, data *BufferedWriter, statistics, indexStatistics ColumnStatistics, bytesPerValue int) (*FloatTreeWriter, error) {
+	return &FloatTreeWriter{
+		BaseTreeWriter: NewBaseTreeWriter(isPresent, statistics, indexStatistics),
+		BufferedWriter: data,
+		bytesPerValue:  bytesPerValue,
+	}, nil
+}
+
+func (f *FloatTreeWriter) Write(value interface{}) error {
+	if err := f.BaseTreeWriter.Write(value); err != nil {
+		return err
+	}
+	if f.bytesPerValue == 8 {
+		return f.WriteDouble(value)
+	}
+	return f.WriteFloat(value)
+}
+
+func (f *FloatTreeWriter) WriteDouble(value interface{}) error {
+	if val, ok := value.(float64); ok {
+		byt := make([]byte, f.bytesPerValue)
+		binary.LittleEndian.PutUint64(byt, math.Float64bits(val))
+		_, err := f.BufferedWriter.Write(byt)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	return fmt.Errorf("expected float64 value, received: %T", value)
+}
+
+func (f *FloatTreeWriter) WriteFloat(value interface{}) error {
+	if val, ok := value.(float32); ok {
+		byt := make([]byte, f.bytesPerValue)
+		binary.LittleEndian.PutUint32(byt, math.Float32bits(val))
+		_, err := f.BufferedWriter.Write(byt)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	return fmt.Errorf("expected float32 value, received: %T", value)
+}
+
+func (f *FloatTreeWriter) Close() error {
+	if err := f.BaseTreeWriter.Close(); err != nil {
+		return err
+	}
+	return f.BufferedWriter.Close()
+}
+
+func (f *FloatTreeWriter) Flush() error {
+	if err := f.BaseTreeWriter.Flush(); err != nil {
+		return err
+	}
+	return f.BufferedWriter.Flush()
+}
+
+func (f *FloatTreeWriter) ColumnEncoding() *proto.ColumnEncoding {
+	return &proto.ColumnEncoding{
+		Kind: proto.ColumnEncoding_DIRECT.Enum(),
+	}
+}

@@ -35,7 +35,6 @@ func (c *Cursor) Select(fields ...string) *Cursor {
 // that will be read.
 func (c *Cursor) prepareStreamReaders() error {
 	var readers []TreeReader
-	// fmt.Println(c.streams)
 	for _, column := range c.columns {
 		reader, err := createTreeReader(column, c.streams, c.Reader)
 		if err != nil {
@@ -57,7 +56,7 @@ func (c *Cursor) prepareNextStripe() error {
 	if err != nil {
 		return err
 	}
-	return nil
+	return c.prepareStreamReaders()
 }
 
 // Next returns true if another set of records are available.
@@ -66,17 +65,7 @@ func (c *Cursor) Next() bool {
 	if c.next() {
 		return true
 	}
-	// If there is an error (such as EOF) return false.
-	if c.Err() != nil {
-		return false
-	}
-	// Otherwise, attempt to prepare the next set of streams for reading.
-	err := c.prepareStreamReaders()
-	if err != nil {
-		c.err = err
-		return false
-	}
-	return true
+	return false
 }
 
 // next returns true if all readers return that another row is available.

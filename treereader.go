@@ -3,6 +3,7 @@ package orc
 import (
 	"bufio"
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -350,6 +351,10 @@ func (s *StringDictionaryTreeReader) getIndexLength(i int) (int, int) {
 func (s *StringDictionaryTreeReader) String() string {
 	i := int(s.reader.Int())
 	offset, length := s.getIndexLength(i)
+	if offset > len(s.dictionaryBytes) || offset+length > len(s.dictionaryBytes) {
+		s.err = fmt.Errorf("invalid offset:%v or length:%v, greater than dictionary size:%v", offset, length, len(s.dictionaryBytes))
+		return ""
+	}
 	return string(s.dictionaryBytes[offset : offset+length])
 }
 
@@ -529,6 +534,9 @@ type StructTreeReader struct {
 }
 
 func (s *StructTreeReader) Next() bool {
+	if !s.BaseTreeReader.Next() {
+		return false
+	}
 	for _, v := range s.children {
 		if !v.Next() {
 			return false
@@ -550,9 +558,6 @@ func (s *StructTreeReader) Value() interface{} {
 }
 
 func (s *StructTreeReader) Err() error {
-	if s.err != nil {
-		return s.err
-	}
 	for _, child := range s.children {
 		if err := child.Err(); err != nil {
 			return err
@@ -584,7 +589,6 @@ func (r *FloatTreeReader) Next() bool {
 }
 
 func (r *FloatTreeReader) Float() float32 {
-	var val uint32
 	bs := make([]byte, r.bytesPerValue, r.bytesPerValue)
 	n, err := r.Reader.Read(bs)
 	if err != nil {
@@ -595,17 +599,28 @@ func (r *FloatTreeReader) Float() float32 {
 		r.err = fmt.Errorf("read unexpected number of bytes: %v, expected:%v", n, r.bytesPerValue)
 		return 0
 	}
-	for i := 0; i < len(bs); i++ {
-		val |= uint32(bs[i]) << uint(i*8)
+	return math.Float32frombits(binary.LittleEndian.Uint32(bs))
+}
+
+func (r *FloatTreeReader) Double() float64 {
+	bs := make([]byte, r.bytesPerValue, r.bytesPerValue)
+	n, err := r.Reader.Read(bs)
+	if err != nil {
+		r.err = err
+		return 0
 	}
-	return math.Float32frombits(val)
+	if n != r.bytesPerValue {
+		r.err = fmt.Errorf("read unexpected number of bytes: %v, expected:%v", n, r.bytesPerValue)
+		return 0
+	}
+	return math.Float64frombits(binary.LittleEndian.Uint64(bs))
 }
 
 func (r *FloatTreeReader) Value() interface{} {
 	if r.bytesPerValue == 4 {
 		return r.Float()
 	}
-	return r.Float()
+	return r.Double()
 }
 
 func (r *FloatTreeReader) Err() error {

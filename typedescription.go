@@ -6,11 +6,14 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"code.simon-critchley.co.uk/orc/proto"
 )
 
 type Category struct {
 	name        string
 	isPrimitive bool
+	typeKind    *proto.Type_Kind
 }
 
 func (c Category) String() string {
@@ -18,24 +21,24 @@ func (c Category) String() string {
 }
 
 var (
-	CategoryBoolean   = Category{"boolean", true}
-	CategoryByte      = Category{"tinyint", true}
-	CategoryShort     = Category{"smallint", true}
-	CategoryInt       = Category{"int", true}
-	CategoryLong      = Category{"bigint", true}
-	CategoryFloat     = Category{"float", true}
-	CategoryDouble    = Category{"double", true}
-	CategoryString    = Category{"string", true}
-	CategoryDate      = Category{"date", true}
-	CategoryTimestamp = Category{"timestamp", true}
-	CategoryBinary    = Category{"binary", true}
-	CategoryDecimal   = Category{"decimal", true}
-	CategoryVarchar   = Category{"varchar", true}
-	CategoryChar      = Category{"char", true}
-	CategoryList      = Category{"array", false}
-	CategoryMap       = Category{"map", false}
-	CategoryStruct    = Category{"struct", false}
-	CategoryUnion     = Category{"uniontype", false}
+	CategoryBoolean   = Category{"boolean", true, proto.Type_BOOLEAN.Enum()}
+	CategoryByte      = Category{"tinyint", true, proto.Type_BYTE.Enum()}
+	CategoryShort     = Category{"smallint", true, proto.Type_SHORT.Enum()}
+	CategoryInt       = Category{"int", true, proto.Type_INT.Enum()}
+	CategoryLong      = Category{"bigint", true, proto.Type_LONG.Enum()}
+	CategoryFloat     = Category{"float", true, proto.Type_FLOAT.Enum()}
+	CategoryDouble    = Category{"double", true, proto.Type_DOUBLE.Enum()}
+	CategoryString    = Category{"string", true, proto.Type_STRING.Enum()}
+	CategoryDate      = Category{"date", true, proto.Type_DATE.Enum()}
+	CategoryTimestamp = Category{"timestamp", true, proto.Type_TIMESTAMP.Enum()}
+	CategoryBinary    = Category{"binary", true, proto.Type_BINARY.Enum()}
+	CategoryDecimal   = Category{"decimal", true, proto.Type_DECIMAL.Enum()}
+	CategoryVarchar   = Category{"varchar", true, proto.Type_VARCHAR.Enum()}
+	CategoryChar      = Category{"char", true, proto.Type_CHAR.Enum()}
+	CategoryList      = Category{"array", false, proto.Type_LIST.Enum()}
+	CategoryMap       = Category{"map", false, proto.Type_MAP.Enum()}
+	CategoryStruct    = Category{"struct", false, proto.Type_STRUCT.Enum()}
+	CategoryUnion     = Category{"uniontype", false, proto.Type_UNION.Enum()}
 	Categories        = []Category{
 		CategoryBoolean,
 		CategoryByte,
@@ -64,8 +67,8 @@ type stringPosition struct {
 	length   int
 }
 
-func NewStringPosition(value string) stringPosition {
-	return stringPosition{
+func NewStringPosition(value string) *stringPosition {
+	return &stringPosition{
 		value,
 		0,
 		utf8.RuneCountInString(value),
@@ -617,6 +620,34 @@ func (t *TypeDescription) GetField(fieldName string) (*TypeDescription, error) {
 	return nil, fmt.Errorf("no field with name: %s", fieldName)
 }
 
+func (t *TypeDescription) Type() *proto.Type {
+	ids := t.getChildrenIDs()
+	children := make([]uint32, len(ids))
+	precision := uint32(t.precision)
+	scale := uint32(t.scale)
+	maxLength := uint32(t.maxLength)
+	for i := range ids {
+		children[i] = uint32(ids[i])
+	}
+	return &proto.Type{
+		Kind:          t.category.typeKind,
+		FieldNames:    t.fieldNames,
+		Subtypes:      children,
+		Precision:     &precision,
+		Scale:         &scale,
+		MaximumLength: &maxLength,
+	}
+}
+
+func (t *TypeDescription) Types() []*proto.Type {
+	var types []*proto.Type
+	types = append(types, t.Type())
+	for _, child := range t.children {
+		types = append(types, child.Types()...)
+	}
+	return types
+}
+
 func createMap(key, value *TypeDescription) (*TypeDescription, error) {
 	td, err := NewTypeDescription(
 		SetCategory(CategoryMap),
@@ -647,4 +678,8 @@ func createList(child *TypeDescription) (*TypeDescription, error) {
 		return nil, err
 	}
 	return td, nil
+}
+
+func ParseSchema(schema string) (*TypeDescription, error) {
+	return NewStringPosition(schema).parseType()
 }

@@ -1,7 +1,6 @@
 package orc
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 
@@ -36,7 +35,7 @@ func (s streamName) String() string {
 	return fmt.Sprintf("col:%v kind:%s", s.columnID, s.kind)
 }
 
-type streamWriterMap map[streamName]io.Writer
+type streamWriterMap map[streamName]*BufferedWriter
 
 func (s streamWriterMap) reset() {
 	for k := range s {
@@ -44,8 +43,46 @@ func (s streamWriterMap) reset() {
 	}
 }
 
-func (s streamWriterMap) create(name streamName) io.Writer {
-	var stream bytes.Buffer
-	s[name] = &stream
-	return &stream
+func (s streamWriterMap) create(codec CompressionCodec, name streamName) *BufferedWriter {
+	stream := NewBufferedWriter(codec)
+	s[name] = stream
+	return stream
+}
+
+func (s streamWriterMap) size() int64 {
+	var total int64
+	for i := range s {
+		total += int64(s[i].Len())
+	}
+	return total
+}
+
+func (s streamWriterMap) positions(columnID int) []uint64 {
+	var positions []uint64
+	for k := range s {
+		if k.columnID == columnID {
+			positions = append(positions, s[k].Position())
+		}
+	}
+	return positions
+}
+
+type encodingMap map[int]*proto.ColumnEncoding
+
+func (e encodingMap) add(id int, encoding *proto.ColumnEncoding) {
+	e[id] = encoding
+}
+
+func (e encodingMap) reset() {
+	for k := range e {
+		delete(e, k)
+	}
+}
+
+func (e encodingMap) encodings() []*proto.ColumnEncoding {
+	encodings := make([]*proto.ColumnEncoding, len(e))
+	for i := range encodings {
+		encodings[i] = e[i]
+	}
+	return encodings
 }

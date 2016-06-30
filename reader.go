@@ -75,6 +75,9 @@ func (r *Reader) extractMetaInfoFromFooter() error {
 
 	size := int(r.r.Size())
 	psPlusByte := maxPostScriptSize + 1
+	if psPlusByte > size {
+		psPlusByte = size
+	}
 
 	// Read the last 256 bytes into buffer to get postscript
 	postScriptBytes := make([]byte, psPlusByte, psPlusByte)
@@ -83,7 +86,7 @@ func (r *Reader) extractMetaInfoFromFooter() error {
 	if err != nil {
 		return err
 	}
-	psLen := int(postScriptBytes[len(postScriptBytes)-1] & 0xff)
+	psLen := int(postScriptBytes[len(postScriptBytes)-1])
 	psOffset := len(postScriptBytes) - 1 - psLen
 	r.postScript = &proto.PostScript{}
 	err = gproto.Unmarshal(postScriptBytes[psOffset:psOffset+psLen], r.postScript)
@@ -154,6 +157,7 @@ func (r *Reader) extractMetaInfoFromFooter() error {
 	if err != nil {
 		return err
 	}
+
 	r.schema, err = r.createSchema(types, 0)
 	if err != nil {
 		return err
@@ -168,6 +172,7 @@ func (r *Reader) getStreams(included ...int) (streamMap, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	r.stripesLength = len(stripes)
 	if r.currentStripeOffset >= r.stripesLength {
 		return nil, io.EOF
@@ -255,6 +260,14 @@ func (r *Reader) getStreams(included ...int) (streamMap, error) {
 				kind:     stream.GetKind(),
 			}
 			streams.set(name, &streamBuf)
+
+			if stream.GetKind() == proto.Stream_ROW_INDEX {
+				var rowIndex proto.RowIndex
+				err = gproto.Unmarshal(streamBuf.Bytes(), &rowIndex)
+				if err != nil {
+					return nil, err
+				}
+			}
 		}
 		// Increment the streamOffset for the next stream.
 		streamOffset += streamLength
