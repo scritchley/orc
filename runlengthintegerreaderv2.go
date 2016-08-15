@@ -108,6 +108,7 @@ func (r *RunLengthIntegerReaderV2) readValues(ignoreEOF bool) error {
 		return err
 	}
 	r.currentEncoding = RLEEncodingType((uint64(firstByte) >> 6) & 0x03)
+	println(r.currentEncoding.String())
 	switch r.currentEncoding {
 	case RLEV2IntShortRepeat:
 		return r.readShortRepeatValues(firstByte)
@@ -267,6 +268,8 @@ func (r *RunLengthIntegerReaderV2) readDirectValues(firstByte byte) error {
 	l |= int(nextByte)
 	// runs are one off
 	l++
+
+	println(l)
 
 	// write the unpacked values and zigzag decode to result buffer
 	err = readInts(r.literals, r.numLiterals, l, int(fb), r)

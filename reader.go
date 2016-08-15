@@ -188,6 +188,7 @@ func (r *Reader) getStreams(included ...int) (streamMap, error) {
 	stripeFooterLength := int64(stripe.GetFooterLength())
 	stripeFooterReader := io.NewSectionReader(r.r, stripeFooterOffset, stripeFooterLength)
 	stripeFooterBytes := make([]byte, stripeFooterLength, stripeFooterLength)
+
 	_, err = io.ReadFull(stripeFooterReader, stripeFooterBytes)
 	if err != nil {
 		return nil, err
@@ -260,12 +261,17 @@ func (r *Reader) getStreams(included ...int) (streamMap, error) {
 				kind:     stream.GetKind(),
 			}
 			streams.set(name, &streamBuf)
-
+			if stream.GetKind() == proto.Stream_DICTIONARY_DATA {
+				fmt.Println(name, streamBuf.Len(), streamBuf.String())
+			}
 			if stream.GetKind() == proto.Stream_ROW_INDEX {
 				var rowIndex proto.RowIndex
 				err = gproto.Unmarshal(streamBuf.Bytes(), &rowIndex)
 				if err != nil {
 					return nil, err
+				}
+				for i := range rowIndex.Entry {
+					fmt.Println(rowIndex.Entry[i])
 				}
 			}
 		}

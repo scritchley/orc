@@ -70,10 +70,16 @@ func createTreeReader(schema *TypeDescription, m streamMap, r *Reader) (TreeRead
 		return NewBinaryTreeReader(
 			m.get(streamName{id, proto.Stream_PRESENT}),
 			m.get(streamName{id, proto.Stream_DATA}),
+			m.get(streamName{id, proto.Stream_LENGTH}),
+			encoding,
+		)
+	case CategoryDecimal:
+		return NewDecimalTreeReader(
+			m.get(streamName{id, proto.Stream_PRESENT}),
+			m.get(streamName{id, proto.Stream_DATA}),
 			m.get(streamName{id, proto.Stream_SECONDARY}),
 			encoding,
 		)
-	// case CategoryDecimal:
 	case CategoryList:
 		if len(schema.children) != 1 {
 			return nil, fmt.Errorf("expect 1 child for list type, got: %v", len(schema.children))
@@ -120,7 +126,20 @@ func createTreeReader(schema *TypeDescription, m streamMap, r *Reader) (TreeRead
 			m.get(streamName{id, proto.Stream_PRESENT}),
 			children,
 		)
-		// case CategoryUnion:
+	case CategoryUnion:
+		children := make([]TreeReader, len(schema.children))
+		for i := range schema.children {
+			child, err := createTreeReader(schema.children[i], m, r)
+			if err != nil {
+				return nil, err
+			}
+			children[i] = child
+		}
+		return NewUnionTreeReader(
+			m.get(streamName{id, proto.Stream_PRESENT}),
+			m.get(streamName{id, proto.Stream_DATA}),
+			children,
+		)
 	default:
 		return nil, fmt.Errorf("unsupported type: %s", category)
 	}

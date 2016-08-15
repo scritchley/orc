@@ -8,6 +8,7 @@ type Cursor struct {
 	columns  []*TypeDescription
 	included []int
 	readers  []TreeReader
+	nextVal  []interface{}
 	err      error
 }
 
@@ -63,6 +64,7 @@ func (c *Cursor) prepareNextStripe() error {
 func (c *Cursor) Next() bool {
 	// If readers have values available return true.
 	if c.next() {
+		c.row()
 		return true
 	}
 	return false
@@ -84,17 +86,21 @@ func (c *Cursor) next() bool {
 	return true
 }
 
-// Row returns the next row of values.
-func (c *Cursor) Row() []interface{} {
-	s := make([]interface{}, len(c.readers), len(c.readers))
+// row preallocates the next row of values and stores in nextVal.
+func (c *Cursor) row() {
+	c.nextVal = make([]interface{}, len(c.readers), len(c.readers))
 	for i, reader := range c.readers {
 		if !reader.IsPresent() {
-			s[i] = nil
+			c.nextVal[i] = nil
 			continue
 		}
-		s[i] = reader.Value()
+		c.nextVal[i] = reader.Value()
 	}
-	return s
+}
+
+// Row returns the next row of values.
+func (c *Cursor) Row() []interface{} {
+	return c.nextVal
 }
 
 // Err returns the last error to have occurred.

@@ -328,10 +328,6 @@ func (s *StringDictionaryTreeReader) readDictionaryLength(length io.Reader, enco
 	return nil
 }
 
-func (s *StringDictionaryTreeReader) IsPresent() bool {
-	return s.BaseTreeReader.IsPresent()
-}
-
 func (s *StringDictionaryTreeReader) Next() bool {
 	return s.BaseTreeReader.Next() && s.reader.Next()
 }
@@ -481,6 +477,7 @@ type ListTreeReader struct {
 	BaseTreeReader
 	length IntegerReader
 	value  TreeReader
+	err    error
 }
 
 func (r *ListTreeReader) Next() bool {
@@ -517,14 +514,14 @@ func (r *ListTreeReader) Err() error {
 }
 
 func NewListTreeReader(present, length io.Reader, value TreeReader, encoding *proto.ColumnEncoding) (*ListTreeReader, error) {
-	lengthReader, err := createIntegerReader(encoding.GetKind(), length, true, false)
+	lengthReader, err := createIntegerReader(encoding.GetKind(), length, false, false)
 	if err != nil {
 		return nil, err
 	}
 	return &ListTreeReader{
-		NewBaseTreeReader(present),
-		lengthReader,
-		value,
+		BaseTreeReader: NewBaseTreeReader(present),
+		length:         lengthReader,
+		value:          value,
 	}, nil
 }
 
@@ -638,15 +635,12 @@ func NewFloatTreeReader(bytesPerValue int, present, data io.Reader, encoding *pr
 	}, nil
 }
 
+// BinaryTreeReader is a TreeReader that reads a Binary type column.
 type BinaryTreeReader struct {
 	BaseTreeReader
 	length IntegerReader
 	data   io.Reader
 	err    error
-}
-
-func (r *BinaryTreeReader) IsPresent() bool {
-	return r.BaseTreeReader.IsPresent()
 }
 
 func (r *BinaryTreeReader) Next() bool {
@@ -663,6 +657,10 @@ func (r *BinaryTreeReader) Binary() []byte {
 		r.err = fmt.Errorf("read unexpected number of bytes: %v, expected:%v", n, l)
 	}
 	return b
+}
+
+func (r *BinaryTreeReader) Value() interface{} {
+	return r.Binary()
 }
 
 func (r *BinaryTreeReader) Err() error {
@@ -687,6 +685,7 @@ func NewBinaryTreeReader(present, data, length io.Reader, encoding *proto.Column
 	}, nil
 }
 
+// UnionTreeReader is a TreeReader that reads a Union type column.
 type UnionTreeReader struct {
 	BaseTreeReader
 	data     *RunLengthByteReader
@@ -694,6 +693,7 @@ type UnionTreeReader struct {
 	err      error
 }
 
+// NewUnionTreeReader returns a new instance of a UnionTreeReader or an error if one occurs.
 func NewUnionTreeReader(present, data io.Reader, children []TreeReader) (*UnionTreeReader, error) {
 	return &UnionTreeReader{
 		BaseTreeReader: NewBaseTreeReader(present),
@@ -702,10 +702,12 @@ func NewUnionTreeReader(present, data io.Reader, children []TreeReader) (*UnionT
 	}, nil
 }
 
+// Next returns true if another value is available.
 func (u *UnionTreeReader) Next() bool {
 	return u.BaseTreeReader.Next() && u.data.Next()
 }
 
+// Value returns the next value as an interface{}.
 func (u *UnionTreeReader) Value() interface{} {
 	i := int(u.data.Byte())
 	if i >= len(u.children) {
@@ -717,6 +719,7 @@ func (u *UnionTreeReader) Value() interface{} {
 	return fmt.Errorf("no value available in union child column: %v", i)
 }
 
+// Err returns the last error to have occurred.
 func (u *UnionTreeReader) Err() error {
 	if u.err != nil {
 		return u.err
@@ -729,13 +732,16 @@ func (u *UnionTreeReader) Err() error {
 	return u.BaseTreeReader.Err()
 }
 
+// DecimalTreeReader is a TreeReader that reads a Decimal type column.
 type DecimalTreeReader struct {
 	BaseTreeReader
-	data      io.Reader
+	data      io.ByteReader
 	secondary IntegerReader
 	err       error
+	nextVal   float64
 }
 
+// NewDecimalTreeReader returns a new instances of a DecimalTreeReader or an error if one occurs.
 func NewDecimalTreeReader(present, data, secondary io.Reader, encoding *proto.ColumnEncoding) (*DecimalTreeReader, error) {
 	ireader, err := createIntegerReader(encoding.GetKind(), secondary, false, false)
 	if err != nil {
@@ -743,15 +749,36 @@ func NewDecimalTreeReader(present, data, secondary io.Reader, encoding *proto.Co
 	}
 	return &DecimalTreeReader{
 		BaseTreeReader: NewBaseTreeReader(present),
-		data:           data,
+		data:           bufio.NewReader(data),
 		secondary:      ireader,
 	}, nil
 }
 
+// Next returns true if a value is available.
 func (d *DecimalTreeReader) Next() bool {
-	return d.BaseTreeReader.Next() && d.secondary.Next()
+	if d.BaseTreeReader.Next() && d.secondary.Next() {
+		i, err := binary.ReadVarint(d.data)
+		if err != nil {
+			d.err = err
+			return false
+		}
+		d.nextVal = float64(i) * math.Pow(10, -float64(d.secondary.Int()))
+		return true
+	}
+	return false
 }
 
+// Decimal returns the next decimal value as a float64
+func (d *DecimalTreeReader) Decimal() float64 {
+	return d.nextVal
+}
+
+// Value returns the next decimal value as an interface{}
+func (d *DecimalTreeReader) Value() interface{} {
+	return d.Decimal()
+}
+
+// Err returns the last error to have occurred.
 func (d *DecimalTreeReader) Err() error {
 	if d.err != nil {
 		return d.err

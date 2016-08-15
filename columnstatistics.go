@@ -9,15 +9,22 @@ type statisticsMap map[int]ColumnStatistics
 func NewColumnStatistics(category Category) ColumnStatistics {
 	switch category {
 	case CategoryInt, CategoryShort, CategoryLong:
-		return NewIntegerColumnStatistics()
+		return NewIntegerStatistics()
+	case CategoryString:
+		return NewStringStatistics()
+	case CategoryBoolean:
+		return NewBucketStatistics()
 	default:
 		return NewBaseStatistics()
 	}
 }
 
-func (e statisticsMap) add(id int, category Category) ColumnStatistics {
-	e[id] = NewColumnStatistics(category)
-	return e[id]
+func (e statisticsMap) add(id int, stats ColumnStatistics) {
+	if _, ok := e[id]; ok {
+		e[id].Merge(stats)
+	} else {
+		e[id] = stats
+	}
 }
 
 func (e statisticsMap) reset() {
@@ -129,10 +136,10 @@ func (i *IntegerStatistics) Statistics() *proto.ColumnStatistics {
 }
 
 func (i *IntegerStatistics) Reset() {
-	*i = *NewIntegerColumnStatistics()
+	*i = *NewIntegerStatistics()
 }
 
-func NewIntegerColumnStatistics() *IntegerStatistics {
+func NewIntegerStatistics() *IntegerStatistics {
 	base := NewBaseStatistics()
 	base.IntStatistics = &proto.IntegerStatistics{}
 	return &IntegerStatistics{
@@ -140,37 +147,74 @@ func NewIntegerColumnStatistics() *IntegerStatistics {
 	}
 }
 
-// func NewColumnStatistics(stats proto.ColumnStatistics) ColumnStatistics {
+type StringStatistics struct {
+	BaseStatistics
+	minSet bool
+}
 
-// }
+func NewStringStatistics() *StringStatistics {
+	base := NewBaseStatistics()
+	base.StringStatistics = &proto.StringStatistics{}
+	return &StringStatistics{
+		BaseStatistics: base,
+	}
+}
 
-// type BooleanStatistics struct {
-// 	trueCount int64
-// }
+func (s *StringStatistics) Merge(other ColumnStatistics) {
+	if ss, ok := other.(*StringStatistics); ok {
+		if ss.StringStatistics.GetMaximum() > s.StringStatistics.GetMaximum() {
+			s.StringStatistics.Maximum = ss.StringStatistics.Maximum
+		}
+		if ss.StringStatistics.GetMinimum() < s.StringStatistics.GetMinimum() {
+			s.StringStatistics.Minimum = ss.StringStatistics.Minimum
+		}
+		sum := s.StringStatistics.GetSum() + ss.StringStatistics.GetSum()
+		s.StringStatistics.Sum = &sum
+		s.BaseStatistics.Merge(ss.BaseStatistics)
+	}
+}
 
-// func NewBooleanStatistics(stats proto.ColumnStatistics) *BooleanStatistics {
-// 	bkt := stats.GetBucketStatistics()
-// 	vals := bkt.GetCount()
-// 	if len(vals) > 0 {
-// 		bs.trueCount = int64(vals[0])
-// 	}
-// 	return bs
-// }
+func (s *StringStatistics) Add(value interface{}) {
+	if val, ok := value.(string); ok {
+		if val > s.StringStatistics.GetMaximum() {
+			s.StringStatistics.Maximum = &val
+		}
+		if !s.minSet {
+			s.StringStatistics.Minimum = &val
+			s.minSet = true
+		}
+		if val < s.StringStatistics.GetMinimum() {
+			s.StringStatistics.Minimum = &val
+		}
+		sum := s.StringStatistics.GetSum() + int64(len(val))
+		s.StringStatistics.Sum = &sum
+	}
+	s.BaseStatistics.Add(value)
+}
 
-// func (b *BooleanStatistics) reset() {
-// 	b.ColumnStatistics.reset()
-// 	b.trueCount = 0
-// }
+func (s *StringStatistics) Reset() {
+	*s = *NewStringStatistics()
+}
 
-// func (b *BooleanStatistics) updateBoolean(value bool, repetitions int) {
-// 	if value {
-// 		b.trueCount += int64(repetitions)
-// 	}
-// }
+func (s *StringStatistics) Statistics() *proto.ColumnStatistics {
+	return s.ColumnStatistics
+}
 
-// func (b *BooleanStatistics) merge(other ColumnStatisticsInterface) {
-// 	if b2, ok := other.(*BooleanStatistics); ok {
-// 		b.trueCount += b2.trueCount
-// 	}
-// 	b.ColumnStatistics.merge(other)
-// }
+type BucketStatistics struct {
+	BaseStatistics
+}
+
+func NewBucketStatistics() *BucketStatistics {
+	base := NewBaseStatistics()
+	base.BucketStatistics = &proto.BucketStatistics{}
+	return &BucketStatistics{
+		base,
+	}
+}
+
+func (b *BucketStatistics) Add(value interface{}) {
+	if t, ok := value.(bool); ok {
+		b.BaseStatistics
+	}
+	b.BaseStatistics.Add(value)
+}

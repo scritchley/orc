@@ -57,32 +57,38 @@ func (s streamWriterMap) size() int64 {
 	return total
 }
 
-func (s streamWriterMap) positions(columnID int) []uint64 {
-	var positions []uint64
-	for k := range s {
-		if k.columnID == columnID {
-			positions = append(positions, s[k].Position())
+// Stream is an individual stream for the TreeWriter.
+type Stream struct {
+	kind   *proto.Stream_Kind
+	buffer *BufferedWriter
+}
+
+func (s Stream) Positions() []uint64 {
+	return s.buffer.Positions()
+}
+
+type writerMap map[int]TreeWriter
+
+func (w writerMap) forEach(fn func(i int, t TreeWriter) error) error {
+	for i := 0; i < len(w); i++ {
+		if t, ok := w[i]; ok {
+			err := fn(i, t)
+			if err != nil {
+				return err
+			}
 		}
 	}
-	return positions
+	return nil
 }
 
-type encodingMap map[int]*proto.ColumnEncoding
-
-func (e encodingMap) add(id int, encoding *proto.ColumnEncoding) {
-	e[id] = encoding
+func (w writerMap) add(id int, t TreeWriter) {
+	w[id] = t
 }
 
-func (e encodingMap) reset() {
-	for k := range e {
-		delete(e, k)
-	}
-}
-
-func (e encodingMap) encodings() []*proto.ColumnEncoding {
-	encodings := make([]*proto.ColumnEncoding, len(e))
+func (w writerMap) encodings() []*proto.ColumnEncoding {
+	encodings := make([]*proto.ColumnEncoding, len(w))
 	for i := range encodings {
-		encodings[i] = e[i]
+		encodings[i] = w[i].Encoding()
 	}
 	return encodings
 }

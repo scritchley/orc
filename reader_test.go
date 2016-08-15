@@ -1,27 +1,61 @@
 package orc
 
 import (
+	"encoding/json"
 	"io"
+	"os"
+	"reflect"
 	"testing"
 )
 
 func TestReader(t *testing.T) {
+
+	expectedFile, err := os.Open("./examples/expected/orc-file-11-format.jsn")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec := json.NewDecoder(expectedFile)
 
 	r, err := Open("./examples/orc-file-11-format.orc")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer r.Close()
-	c := r.Select("boolean1")
-	row := 0
+
+	c := r.Select("*")
 	for c.Stripes() {
 		for c.Next() {
-			c.Row()
-			row++
+			var expected map[string]interface{}
+			err := dec.Decode(&expected)
+			if err != nil {
+				t.Fatal(err)
+			}
+			actual := c.Row()[0]
+			if !reflect.DeepEqual(expected, actual) {
+				t.Errorf("Test failed, expected %v to equal %v", actual, expected)
+			}
 		}
 	}
-	t.Log(row)
+	if err := c.Err(); err != nil && err != io.EOF {
+		t.Fatal(err)
+	}
 
+}
+
+func TestReader2(t *testing.T) {
+
+	r, err := Open("./examples/testorc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+
+	c := r.Select("*")
+	for c.Stripes() {
+		for c.Next() {
+			// t.Log(c.Row())
+		}
+	}
 	if err := c.Err(); err != nil && err != io.EOF {
 		t.Fatal(err)
 	}

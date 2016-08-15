@@ -13,7 +13,7 @@ var (
 	magic                              = "ORC"
 	stripeTargetSize            int64  = 200 * 1024 * 1024
 	DefaultCompressionChunkSize uint64 = 256 * 1024
-	DefaultRowIndexStride       uint32 = 10000
+	DefaultRowIndexStride       uint32 = 100000
 )
 
 type Writer struct {
@@ -21,7 +21,7 @@ type Writer struct {
 	streams           streamWriterMap
 	w                 io.Writer
 	treeWriter        TreeWriter
-	columns           []*proto.ColumnEncoding
+	treeWriters       writerMap
 	stripeRows        uint64
 	stripeOffset      uint64
 	stripeLength      uint64
@@ -35,8 +35,6 @@ type Writer struct {
 	metadataLength    uint64
 	totalRows         uint64
 	statistics        statisticsMap
-	currentStatistics statisticsMap
-	indexStatistics   statisticsMap
 	indexes           map[int]*proto.RowIndex
 	indexOffset       uint64
 	chunkOffset       uint64
@@ -63,7 +61,6 @@ func NewWriter(w io.Writer, fns ...WriterConfigFunc) (*Writer, error) {
 		stripeTargetSize: stripeTargetSize,
 		streams:          make(streamWriterMap),
 		statistics:       make(statisticsMap),
-		indexStatistics:  make(statisticsMap),
 		indexes:          make(map[int]*proto.RowIndex),
 		footer: &proto.Footer{
 			RowIndexStride: &DefaultRowIndexStride,
@@ -109,15 +106,11 @@ func (w *Writer) Write(values ...interface{}) error {
 		return err
 	}
 	if w.totalRows%uint64(w.footer.GetRowIndexStride()) == 0 {
-		err := w.writeIndexes()
-		if err != nil {
+		if err := w.flushWriters(); err != nil {
 			return err
 		}
 		if w.streams.size() >= w.stripeTargetSize {
-			err := w.writeStripe()
-			if err != nil {
-				return err
-			}
+			return w.writeStripe()
 		}
 	}
 	return nil
@@ -142,22 +135,15 @@ func (w *Writer) initOrc() error {
 }
 
 func (w *Writer) initWriters() error {
-	// Assumes that the top level type is always a struct, as is specified
-	// in the ORC format docs.
-	columns := make(encodingMap)
-	currentStatistics := make(statisticsMap)
-	indexStatistics := make(statisticsMap)
+	w.treeWriters = make(writerMap)
 	codec, err := w.getCodec()
 	if err != nil {
 		return err
 	}
-	w.treeWriter, err = createTreeWriter(codec, w.schema, w.streams, columns, currentStatistics, indexStatistics)
+	w.treeWriter, err = createTreeWriter(codec, w.schema, w.treeWriters)
 	if err != nil {
 		return err
 	}
-	w.columns = columns.encodings()
-	w.currentStatistics = currentStatistics
-	w.indexStatistics = indexStatistics
 	return nil
 }
 
@@ -220,33 +206,6 @@ func (w *Writer) writeMetadata() error {
 	return nil
 }
 
-func (w *Writer) writeIndexes() error {
-	if err := w.flushWriters(); err != nil {
-		return err
-	}
-	for i := 0; i < len(w.indexStatistics); i++ {
-		// Get the current offset for the stream
-		c := w.indexStatistics[i]
-		if rowIndex, ok := w.indexes[i]; ok {
-			w.indexes[i].Entry = append(rowIndex.Entry, &proto.RowIndexEntry{
-				Positions:  w.streams.positions(i),
-				Statistics: c.Statistics(),
-			})
-		} else {
-			w.indexes[i] = &proto.RowIndex{
-				Entry: []*proto.RowIndexEntry{
-					&proto.RowIndexEntry{
-						Positions:  w.streams.positions(i),
-						Statistics: c.Statistics(),
-					},
-				},
-			}
-		}
-		c.Reset()
-	}
-	return nil
-}
-
 func (w *Writer) writeStripe() error {
 
 	// Close the current set of writers.
@@ -256,51 +215,71 @@ func (w *Writer) writeStripe() error {
 
 	// Write each stream to the underlying writer.
 	var streams []*proto.Stream
+	var stripeIndexLength uint64
 	var stripeDataLength uint64
+	stripeStatistics := make(statisticsMap)
 
-	// Write the row indexes to the stream first.
-	for i := 0; i < len(w.indexes); i++ {
-		byt, err := gproto.Marshal(w.indexes[i])
+	// Iterate through the TreeWriters and write their output
+	// to the underlying writer.
+	err := w.treeWriters.forEach(func(id int, t TreeWriter) error {
+		// First write the rowIndex for the column.
+		rowIndex := t.RowIndex()
+		byt, err := gproto.Marshal(rowIndex)
 		if err != nil {
 			return err
 		}
+		stripeIndexLength += uint64(len(byt))
 		streamInfo := &proto.Stream{
-			Column: ptrUint32(uint32(i)),
+			Column: ptrUint32(uint32(id)),
 			Kind:   proto.Stream_ROW_INDEX.Enum(),
 			Length: ptrUint64(uint64(len(byt))),
 		}
-		stripeDataLength += uint64(len(byt))
 		streams = append(streams, streamInfo)
 		_, err = w.w.Write(byt)
 		if err != nil {
 			return err
 		}
-	}
-	w.indexes = make(map[int]*proto.RowIndex)
-
-	// Write the remaining streams
-	for name, stream := range w.streams {
-		kind := name.kind
-		streamInfo := &proto.Stream{
-			Column: ptrUint32(uint32(name.columnID)),
-			Kind:   &kind,
-			Length: ptrUint64(uint64(stream.Len())),
-		}
-		stripeDataLength += uint64(stream.Len())
-		streams = append(streams, streamInfo)
-		_, err := stream.WriteTo(w.w)
-		if err != nil {
-			return err
-		}
+		// Add to the running stripe statistics.
+		stripeStatistics.add(id, t.Statistics())
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
-	// Reset the streams ready for the next stripe
-	w.streams.reset()
+	err = w.treeWriters.forEach(func(id int, t TreeWriter) error {
+		// Then write the streams.
+		for _, stream := range t.Streams() {
+			// Get the length of the stream and its kind.
+			length := stream.buffer.Len()
+			kind := *stream.kind
+			// If the stream has zero length after closing
+			// then ignore it and continue to the next stream.
+			if length == 0 {
+				continue
+			}
+			streamInfo := &proto.Stream{
+				Column: ptrUint32(uint32(id)),
+				Kind:   &kind,
+				Length: ptrUint64(uint64(length)),
+			}
+			stripeDataLength += uint64(length)
+			streams = append(streams, streamInfo)
+			_, err := stream.buffer.WriteTo(w.w)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
 
 	// Create a stripe footer and write it to the underlying writer.
 	stripeFooter := &proto.StripeFooter{
 		Streams: streams,
-		Columns: w.columns,
+		Columns: w.treeWriters.encodings(),
 	}
 
 	byt, err := gproto.Marshal(stripeFooter)
@@ -312,8 +291,6 @@ func (w *Writer) writeStripe() error {
 		return err
 	}
 
-	// Append the stripe information to the footer.
-	indexLength := w.stripeIndexOffset
 	stripeRows := w.stripeRows
 	// Reset the stripe rows ready for the next stripe.
 	w.stripeRows = 0
@@ -324,7 +301,7 @@ func (w *Writer) writeStripe() error {
 	offset := w.stripeOffset
 	w.footer.Stripes = append(w.footer.Stripes, &proto.StripeInformation{
 		Offset:       &offset,
-		IndexLength:  &indexLength,
+		IndexLength:  &stripeIndexLength,
 		DataLength:   ptrUint64(stripeDataLength),
 		FooterLength: &footerLength,
 		NumberOfRows: &stripeRows,
@@ -334,20 +311,17 @@ func (w *Writer) writeStripe() error {
 	w.stripeOffset += stripeDataLength + footerLength
 
 	// Add stripe statistics to metadata
-	stripeColStats := w.currentStatistics.statistics()
 	w.metadata.StripeStats = append(w.metadata.StripeStats, &proto.StripeStatistics{
-		ColStats: stripeColStats,
+		ColStats: stripeStatistics.statistics(),
 	})
 
 	// Merge the stripe statistics with the total statistics.
-	w.statistics.merge(w.currentStatistics)
+	w.statistics.merge(stripeStatistics)
+
 	return w.initWriters()
 }
 
 func (w *Writer) Close() error {
-	if err := w.writeIndexes(); err != nil {
-		return err
-	}
 	if err := w.writeStripe(); err != nil {
 		return err
 	}

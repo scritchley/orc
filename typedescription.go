@@ -632,7 +632,7 @@ func (t *TypeDescription) Type() *proto.Type {
 	return &proto.Type{
 		Kind:          t.category.typeKind,
 		FieldNames:    t.fieldNames,
-		Subtypes:      children,
+		Subtypes:      children[:len(t.fieldNames)],
 		Precision:     &precision,
 		Scale:         &scale,
 		MaximumLength: &maxLength,
