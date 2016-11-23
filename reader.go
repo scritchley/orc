@@ -261,19 +261,14 @@ func (r *Reader) getStreams(included ...int) (streamMap, error) {
 				kind:     stream.GetKind(),
 			}
 			streams.set(name, &streamBuf)
-			if stream.GetKind() == proto.Stream_DICTIONARY_DATA {
-				fmt.Println(name, streamBuf.Len(), streamBuf.String())
-			}
-			if stream.GetKind() == proto.Stream_ROW_INDEX {
-				var rowIndex proto.RowIndex
-				err = gproto.Unmarshal(streamBuf.Bytes(), &rowIndex)
-				if err != nil {
-					return nil, err
-				}
-				for i := range rowIndex.Entry {
-					fmt.Println(rowIndex.Entry[i])
-				}
-			}
+			// REMOVE
+			// if stream.GetKind() == proto.Stream_ROW_INDEX {
+			// 	var rowIndex proto.RowIndex
+			// 	err = gproto.Unmarshal(streamBuf.Bytes(), &rowIndex)
+			// 	if err != nil {
+			// 		return nil, err
+			// 	}
+			// }
 		}
 		// Increment the streamOffset for the next stream.
 		streamOffset += streamLength

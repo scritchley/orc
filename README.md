@@ -6,7 +6,12 @@
 
 ## Project Status
 
-This project is still a work in progress. The reader currently supports boolean, byte, short, int, long, string, varchar and char types. The reader currently only supports NONE and ZLIB compression types, SNAPPY support is not currently working.
+This project is still a work in progress. The reader currently supports boolean, byte, short, int, long, string, varchar and char types.
+
+## supports
+
+- Column Encodings:
+- Compression: NONE, ZLIB and SNAPPY are all supported.
 
 ### Example
 

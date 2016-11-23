@@ -23,17 +23,17 @@ func TestRunLengthIntegerReaderV2(t *testing.T) {
 		// 		}
 		// 	},
 		// },
-		// {
-		// 	// Patched Base
-		// 	signed: false,
-		// 	input:  []byte{0x8e, 0x09, 0x2b, 0x21, 0x07, 0xd0, 0x1e, 0x00, 0x14, 0x70, 0x28, 0x32, 0x3c, 0x46, 0x50, 0x5a, 0xfc, 0xe8},
-		// 	expect: func(output []int64) {
-		// 		expected := []int64{2030, 2000, 2020, 1000000, 2040, 2050, 2060, 2070, 2080, 2090}
-		// 		if !reflect.DeepEqual(output, expected) {
-		// 			t.Errorf("Test failed, expected %v to equal %v", output, expected)
-		// 		}
-		// 	},
-		// },
+		{
+			// Patched Base
+			signed: false,
+			input:  []byte{0x8e, 0x09, 0x2b, 0x21, 0x07, 0xd0, 0x1e, 0x00, 0x14, 0x70, 0x28, 0x32, 0x3c, 0x46, 0x50, 0x5a, 0xfc, 0xe8},
+			expect: func(output []int64) {
+				expected := []int64{2030, 2000, 2020, 1000000, 2040, 2050, 2060, 2070, 2080, 2090}
+				if !reflect.DeepEqual(output, expected) {
+					t.Errorf("Test failed, expected %v to equal %v", output, expected)
+				}
+			},
+		},
 		// {
 		// 	// Patched Base
 		// 	signed: false,
@@ -118,16 +118,6 @@ func TestRunLengthIntegerReaderV2(t *testing.T) {
 		// 		}
 		// 	},
 		// },
-		{
-			signed: true,
-			input:  []byte{95, 255, 27, 190, 0, 102, 57, 48, 48, 8, 73, 210, 72, 142, 69, 8, 22, 114, 31, 246, 26, 6, 77, 200, 44, 10, 8, 170, 12},
-			expect: func(output []int64) {
-				expected := []int64{1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
-				if !reflect.DeepEqual(output, expected) {
-					t.Errorf("Test failed, expected %v to equal %v", output, expected)
-				}
-			},
-		},
 	}
 
 	for _, tc := range testCases {

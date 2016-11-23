@@ -33,14 +33,14 @@ func createTreeReader(schema *TypeDescription, m streamMap, r *Reader) (TreeRead
 		)
 	case CategoryFloat:
 		return NewFloatTreeReader(
-			4,
+			4, // Byte width
 			m.get(streamName{id, proto.Stream_PRESENT}),
 			m.get(streamName{id, proto.Stream_DATA}),
 			encoding,
 		)
 	case CategoryDouble:
 		return NewFloatTreeReader(
-			8,
+			8, // Byte width
 			m.get(streamName{id, proto.Stream_PRESENT}),
 			m.get(streamName{id, proto.Stream_DATA}),
 			encoding,
@@ -79,6 +79,8 @@ func createTreeReader(schema *TypeDescription, m streamMap, r *Reader) (TreeRead
 			m.get(streamName{id, proto.Stream_DATA}),
 			m.get(streamName{id, proto.Stream_SECONDARY}),
 			encoding,
+			schema.precision,
+			schema.scale,
 		)
 	case CategoryList:
 		if len(schema.children) != 1 {

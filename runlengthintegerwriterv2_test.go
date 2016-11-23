@@ -79,35 +79,6 @@ func TestRunLengthIntegerWriterV2(t *testing.T) {
 				}
 			},
 		},
-		{
-			// Short Repeat
-			signed: true,
-			input: []int64{3551,
-				51,
-				7320,
-				6148,
-				9449,
-				9287,
-				8836,
-				2873,
-				4091,
-				3331,
-				9956,
-				5637,
-				1109,
-				1650,
-				8971,
-				4443,
-				8459,
-				1739,
-			},
-			expect: func(output []byte) {
-				expected := []byte{2, 1, 64, 5, 80, 1, 1}
-				if !reflect.DeepEqual(output, expected) {
-					t.Errorf("Test failed, expected %v to equal %v", output, expected)
-				}
-			},
-		},
 	}
 
 	for _, tc := range testCases {

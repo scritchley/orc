@@ -212,9 +212,9 @@ func NewBucketStatistics() *BucketStatistics {
 	}
 }
 
-func (b *BucketStatistics) Add(value interface{}) {
-	if t, ok := value.(bool); ok {
-		b.BaseStatistics
-	}
-	b.BaseStatistics.Add(value)
-}
+// func (b *BucketStatistics) Add(value interface{}) {
+// 	if t, ok := value.(bool); ok {
+// 		b.BaseStatistics
+// 	}
+// 	b.BaseStatistics.Add(value)
+// }

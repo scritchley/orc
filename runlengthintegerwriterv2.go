@@ -634,7 +634,7 @@ func (i *RunLengthIntegerWriterV2) writePatchedBaseValues() error {
 		isNegative = true
 	}
 	if isNegative {
-		i.min -= -i.min
+		i.min = -i.min
 	}
 
 	baseWidth := findClosestNumBits(i.min) + 1

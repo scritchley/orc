@@ -77,6 +77,9 @@ func (r *RunLengthIntegerReaderV2) ReadByte() (byte, error) {
 }
 
 func (r *RunLengthIntegerReaderV2) Next() bool {
+	if r.err != nil {
+		return false
+	}
 	return r.used != r.numLiterals || r.available() == nil
 }
 
@@ -107,8 +110,10 @@ func (r *RunLengthIntegerReaderV2) readValues(ignoreEOF bool) error {
 	if err != nil {
 		return err
 	}
+	if firstByte < 0 {
+		return fmt.Errorf("Read past end of RLE integer from from %v", r)
+	}
 	r.currentEncoding = RLEEncodingType((uint64(firstByte) >> 6) & 0x03)
-	println(r.currentEncoding.String())
 	switch r.currentEncoding {
 	case RLEV2IntShortRepeat:
 		return r.readShortRepeatValues(firstByte)
@@ -269,8 +274,6 @@ func (r *RunLengthIntegerReaderV2) readDirectValues(firstByte byte) error {
 	// runs are one off
 	l++
 
-	println(l)
-
 	// write the unpacked values and zigzag decode to result buffer
 	err = readInts(r.literals, r.numLiterals, l, int(fb), r)
 	if err != nil {
@@ -291,10 +294,8 @@ func (r *RunLengthIntegerReaderV2) readDirectValues(firstByte byte) error {
 }
 func (r *RunLengthIntegerReaderV2) readPatchedBaseValues(firstByte byte) error {
 	// extract the number of fixed bits
-	fixedBits := int((uint64(firstByte) >> 1) & 0x1f)
-	if fixedBits != 0 {
-		fixedBits = decodeBitWidth(fixedBits)
-	}
+	fixedBits := decodeBitWidth(int(uint64(firstByte) >> 1 & 0x1f))
+
 	// extract the run length
 	length := int(uint64(firstByte&0x01) << 8)
 	// read a byte
@@ -310,7 +311,7 @@ func (r *RunLengthIntegerReaderV2) readPatchedBaseValues(firstByte byte) error {
 	if err != nil {
 		return err
 	}
-	baseWidth := (uint64(thirdByte) >> 5) & 0x07
+	baseWidth := uint64(thirdByte) >> 5 & 0x07
 	// base width is one off
 	baseWidth++
 	// extract patch width
@@ -321,22 +322,23 @@ func (r *RunLengthIntegerReaderV2) readPatchedBaseValues(firstByte byte) error {
 	if err != nil {
 		return err
 	}
-	patchGapWidth := (uint64(fourthByte) >> 5) & 0x07
+	patchGapWidth := uint64(fourthByte) >> 5 & 0x07
 	// patch gap width is one off
 	patchGapWidth++
 	// extract the length of the patch list
-	patchListLength := fourthByte&0x1F + 1
+	patchListLength := fourthByte & 0x1F
 	// read the next base width number of bytes to extract base value
 	base, err := bytesToLongBE(r, int(baseWidth))
 	if err != nil {
 		return err
 	}
-	mask := (int64(1) << ((baseWidth * 8) - 1))
+	mask := int64(1 << ((baseWidth * 8) - 1))
 	// if MSB of base value is 1 then base is negative value else positive
 	if (base & mask) != 0 {
 		base = base & ^mask
 		base = -base
 	}
+
 	// unpack the data blob
 	unpacked := make([]int64, length)
 	err = readInts(unpacked, 0, length, int(fixedBits), r)
@@ -361,9 +363,9 @@ func (r *RunLengthIntegerReaderV2) readPatchedBaseValues(firstByte byte) error {
 	var currentGap int64
 	var currentPatch int64
 
-	patchMask := int64((int64(1) << uint64(patchWidth)) - 1)
+	patchMask := int64((1 << uint(patchWidth)) - 1)
 
-	currentGap = unpackedPatch[patchIndex] >> uint64(patchWidth)
+	currentGap = int64(uint64(unpackedPatch[patchIndex]) >> uint64(patchWidth))
 	currentPatch = unpackedPatch[patchIndex] & patchMask
 	var actualGap int64
 
@@ -372,7 +374,7 @@ func (r *RunLengthIntegerReaderV2) readPatchedBaseValues(firstByte byte) error {
 	for currentGap == 255 && currentPatch == 0 {
 		actualGap += 255
 		patchIndex++
-		currentGap = int64(unpackedPatch[patchIndex] >> uint64(patchWidth))
+		currentGap = int64(uint64(unpackedPatch[patchIndex]) >> uint64(patchWidth))
 		currentPatch = unpackedPatch[patchIndex] & patchMask
 	}
 	// add the left over gap
@@ -392,7 +394,7 @@ func (r *RunLengthIntegerReaderV2) readPatchedBaseValues(firstByte byte) error {
 
 			if patchIndex < int(patchListLength) {
 				// read the next gap and patch
-				currentGap = unpackedPatch[patchIndex] >> uint64(patchWidth)
+				currentGap = int64(uint64(unpackedPatch[patchIndex]) >> uint64(patchWidth))
 				currentPatch = unpackedPatch[patchIndex] & patchMask
 				actualGap = 0
 				// special case: gap is >255 then patch will be 0. if gap is
@@ -400,7 +402,7 @@ func (r *RunLengthIntegerReaderV2) readPatchedBaseValues(firstByte byte) error {
 				for currentGap == 255 && currentPatch == 0 {
 					actualGap += 255
 					patchIndex++
-					currentGap = unpackedPatch[patchIndex] >> uint64(patchWidth)
+					currentGap = int64(uint64(unpackedPatch[patchIndex]) >> uint64(patchWidth))
 					currentPatch = unpackedPatch[patchIndex] & patchMask
 				}
 				// add the left over gap

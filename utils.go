@@ -1186,7 +1186,7 @@ func bytesToLongBE(r io.ByteReader, n int) (int64, error) {
 			return 0, err
 		}
 		val = int64(byt)
-		out |= int64(val << uint64(n*8))
+		out |= val << uint64(n*8)
 	}
 	return out, nil
 }

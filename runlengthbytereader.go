@@ -91,7 +91,7 @@ func (b *RunLengthByteReader) readValues() error {
 }
 
 func (b *RunLengthByteReader) Value() interface{} {
-	return b.Byte()
+	return int8(b.Byte())
 }
 
 func (b *RunLengthByteReader) Err() error {

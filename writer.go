@@ -13,7 +13,7 @@ var (
 	magic                              = "ORC"
 	stripeTargetSize            int64  = 200 * 1024 * 1024
 	DefaultCompressionChunkSize uint64 = 256 * 1024
-	DefaultRowIndexStride       uint32 = 100000
+	DefaultRowIndexStride       uint32 = 10000
 )
 
 type Writer struct {

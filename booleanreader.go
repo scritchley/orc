@@ -19,13 +19,12 @@ func NewBooleanReader(r io.ByteReader) *BooleanReader {
 func (b *BooleanReader) Next() bool {
 	// read more data if necessary
 	if b.bitsInData == 0 {
-		if b.RunLengthByteReader.Next() {
-			byt := b.RunLengthByteReader.Byte()
-			b.data = byt
-			b.bitsInData = 8
-		} else {
+		if !b.RunLengthByteReader.Next() {
 			return false
 		}
+		byt := b.RunLengthByteReader.Byte()
+		b.data = byt
+		b.bitsInData = 8
 	}
 	b.val = (b.data & 0x80) != 0
 	// mark bit consumed

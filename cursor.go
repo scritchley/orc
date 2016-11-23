@@ -1,5 +1,9 @@
 package orc
 
+import (
+	"fmt"
+)
+
 // Cursor is used for iterating through the stripes and
 // rows within the ORC file.
 type Cursor struct {
@@ -90,10 +94,6 @@ func (c *Cursor) next() bool {
 func (c *Cursor) row() {
 	c.nextVal = make([]interface{}, len(c.readers), len(c.readers))
 	for i, reader := range c.readers {
-		if !reader.IsPresent() {
-			c.nextVal[i] = nil
-			continue
-		}
 		c.nextVal[i] = reader.Value()
 	}
 }
@@ -101,6 +101,17 @@ func (c *Cursor) row() {
 // Row returns the next row of values.
 func (c *Cursor) Row() []interface{} {
 	return c.nextVal
+}
+
+// Scan assigns the values returned by the readers to the destination slice.
+func (c *Cursor) Scan(dest ...interface{}) error {
+	if len(dest) != len(c.readers) {
+		return fmt.Errorf("expected destination slice of length %v got %v", len(c.readers), len(dest))
+	}
+	for i, reader := range c.readers {
+		dest[i] = reader.Value()
+	}
+	return nil
 }
 
 // Err returns the last error to have occurred.

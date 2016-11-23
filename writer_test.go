@@ -33,8 +33,8 @@ func TestWriter(t *testing.T) {
 	}
 	defer f.Close()
 
-	schema, err := ParseSchema("struct<string1:string,int1:int,boolean1:boolean>")
-	// schema, err := ParseSchema("struct<string1:string,int1:int,boolean1:boolean,double1:double,nested:struct<double2:double,nested:struct<int2:int>>>")
+	// schema, err := ParseSchema("struct<string1:string,int1:int,boolean1:boolean>")
+	schema, err := ParseSchema("struct<string1:string,int1:int,boolean1:boolean,double1:double,nested:struct<double2:double,nested:struct<int2:int>>>")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,20 +44,22 @@ func TestWriter(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	length := 100000
+	length := 1000000
+	var intSum int64
 	for i := 0; i < length; i++ {
 		string1 := fmt.Sprintf("%x", rand.Int63n(1000))
 		int1 := rand.Int63n(10000)
+		intSum += int1
 		boolean1 := int1 > 4444
-		// double1 := rand.Float64()
-		// nested := []interface{}{
-		// 	rand.Float64(),
-		// 	[]interface{}{
-		// 		rand.Int63n(10000),
-		// 	},
-		// }
-		// err = w.Write(string1, int1, boolean1, double1, nested)
-		err = w.Write(string1, int1, boolean1)
+		double1 := rand.Float64()
+		nested := []interface{}{
+			rand.Float64(),
+			[]interface{}{
+				rand.Int63n(10000),
+			},
+		}
+		err = w.Write(string1, int1, boolean1, double1, nested)
+		// err = w.Write(string1, int1, boolean1)
 		// err = w.Write(string1)
 		if err != nil {
 			t.Fatal(err)
@@ -75,17 +77,22 @@ func TestWriter(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := r.Select("*")
+	var compareIntSum int64
+	c := r.Select("int1")
 	row := 0
 	for c.Stripes() {
 		for c.Next() {
-			// t.Log(c.Row())
+			compareIntSum += c.Row()[0].(int64)
 			row++
 		}
 	}
 
 	if err := c.Err(); err != nil && err != io.EOF {
 		t.Fatal(err)
+	}
+
+	if intSum != compareIntSum {
+		t.Errorf("Test failed, expected %v sum got %v", intSum, compareIntSum)
 	}
 
 	if row != length {

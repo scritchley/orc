@@ -17,16 +17,11 @@ var (
 	unsupportedFormat = errors.New("unsupported format")
 )
 
-type ValueReader interface {
+// TreeReader is an interface that provides methods for reading an individual stream.
+type TreeReader interface {
 	Next() bool
 	Value() interface{}
 	Err() error
-}
-
-// TreeReader is an interface that provides methods for reading an individual stream.
-type TreeReader interface {
-	ValueReader
-	IsPresent() bool
 }
 
 // BaseTreeReader wraps a *BooleanReader and is used for reading the Present stream
@@ -67,9 +62,10 @@ func (b BaseTreeReader) Err() error {
 	return nil
 }
 
-// IntegerReader is an interface that provides methods for reading an integer stream.
+// IntegerReader is an interface that provides methods for reading an
+// integer stream that uses V1 or V2 encoding methods.
 type IntegerReader interface {
-	ValueReader
+	TreeReader
 	Int() int64
 }
 
@@ -79,14 +75,23 @@ type IntegerTreeReader struct {
 	IntegerReader
 }
 
-// IsPresent implements the TreeReader interface.
-func (i *IntegerTreeReader) IsPresent() bool {
-	return i.BaseTreeReader.IsPresent()
-}
-
 // Next implements the TreeReader interface.
 func (i *IntegerTreeReader) Next() bool {
-	return i.BaseTreeReader.Next() && i.IntegerReader.Next()
+	if !i.BaseTreeReader.Next() {
+		return false
+	}
+	if !i.BaseTreeReader.IsPresent() {
+		return true
+	}
+	return i.IntegerReader.Next()
+}
+
+// Value implements the TreeReader interface.
+func (i *IntegerTreeReader) Value() interface{} {
+	if !i.BaseTreeReader.IsPresent() {
+		return nil
+	}
+	return i.IntegerReader.Value()
 }
 
 // Err implements the TreeReader interface.
@@ -134,6 +139,12 @@ type TimestampTreeReader struct {
 
 // Next implements the TreeReader interface.
 func (t *TimestampTreeReader) Next() bool {
+	if !t.BaseTreeReader.Next() {
+		return false
+	}
+	if !t.BaseTreeReader.IsPresent() {
+		return true
+	}
 	return t.data.Next() && t.secondary.Next()
 }
 
@@ -144,6 +155,9 @@ func (t *TimestampTreeReader) Timestamp() time.Time {
 
 // Value implements the TreeReader interface.
 func (t *TimestampTreeReader) Value() interface{} {
+	if !t.BaseTreeReader.IsPresent() {
+		return nil
+	}
 	return t.Timestamp()
 }
 
@@ -235,7 +249,16 @@ func NewStringDirectTreeReader(present, data, length io.Reader, kind proto.Colum
 }
 
 func (s *StringDirectTreeReader) Next() bool {
-	return s.BaseTreeReader.Next() && s.length.Next() && s.err == nil
+	if s.err != nil {
+		return false
+	}
+	if !s.BaseTreeReader.Next() {
+		return false
+	}
+	if !s.BaseTreeReader.IsPresent() {
+		return true
+	}
+	return s.length.Next()
 }
 
 func (s *StringDirectTreeReader) String() string {
@@ -254,6 +277,9 @@ func (s *StringDirectTreeReader) String() string {
 }
 
 func (s *StringDirectTreeReader) Value() interface{} {
+	if !s.BaseTreeReader.IsPresent() {
+		return nil
+	}
 	return s.String()
 }
 
@@ -329,7 +355,13 @@ func (s *StringDictionaryTreeReader) readDictionaryLength(length io.Reader, enco
 }
 
 func (s *StringDictionaryTreeReader) Next() bool {
-	return s.BaseTreeReader.Next() && s.reader.Next()
+	if !s.BaseTreeReader.Next() {
+		return false
+	}
+	if !s.BaseTreeReader.IsPresent() {
+		return true
+	}
+	return s.reader.Next()
 }
 
 func (s *StringDictionaryTreeReader) getIndexLength(i int) (int, int) {
@@ -355,6 +387,9 @@ func (s *StringDictionaryTreeReader) String() string {
 }
 
 func (s *StringDictionaryTreeReader) Value() interface{} {
+	if !s.BaseTreeReader.IsPresent() {
+		return nil
+	}
 	return s.String()
 }
 
@@ -374,14 +409,19 @@ type BooleanTreeReader struct {
 }
 
 func (b *BooleanTreeReader) Next() bool {
-	return b.BaseTreeReader.Next() && b.BooleanReader.Next()
-}
-
-func (b *BooleanTreeReader) Bool() bool {
-	return b.BooleanReader.Bool()
+	if !b.BaseTreeReader.Next() {
+		return false
+	}
+	if !b.BaseTreeReader.IsPresent() {
+		return true
+	}
+	return b.BooleanReader.Next()
 }
 
 func (b *BooleanTreeReader) Value() interface{} {
+	if !b.BaseTreeReader.IsPresent() {
+		return nil
+	}
 	return b.Bool()
 }
 
@@ -404,20 +444,21 @@ type ByteTreeReader struct {
 	*RunLengthByteReader
 }
 
-func (b *ByteTreeReader) IsPresent() bool {
-	return b.BaseTreeReader.IsPresent()
-}
-
 func (b *ByteTreeReader) Next() bool {
-	return b.BaseTreeReader.Next() && b.RunLengthByteReader.Next()
-}
-
-func (b *ByteTreeReader) Byte() byte {
-	return b.RunLengthByteReader.Byte()
+	if !b.BaseTreeReader.Next() {
+		return false
+	}
+	if !b.BaseTreeReader.IsPresent() {
+		return true
+	}
+	return b.RunLengthByteReader.Next()
 }
 
 func (b *ByteTreeReader) Value() interface{} {
-	return b.Byte()
+	if !b.BaseTreeReader.IsPresent() {
+		return nil
+	}
+	return b.RunLengthByteReader.Value()
 }
 
 func (b *ByteTreeReader) Err() error {
@@ -442,26 +483,46 @@ type MapTreeReader struct {
 }
 
 func (m *MapTreeReader) Next() bool {
+	if !m.BaseTreeReader.Next() {
+		return false
+	}
+	if !m.BaseTreeReader.IsPresent() {
+		return true
+	}
 	return m.length.Next() && m.key.Next() && m.value.Next()
 }
 
-func (m *MapTreeReader) Map() map[interface{}]interface{} {
+type mapTreeReaderEntry struct {
+	Key   interface{} `json:"key"`
+	Value interface{} `json:"value"`
+}
+
+func (m *MapTreeReader) Map() []mapTreeReaderEntry {
 	l := int(m.length.Int())
-	kv := make(map[interface{}]interface{})
+	kv := make([]mapTreeReaderEntry, l)
 	for i := 0; i < l; i++ {
-		k := m.key.Value()
-		v := m.value.Value()
-		kv[k] = v
+		kv[i] = mapTreeReaderEntry{
+			Key:   m.key.Value(),
+			Value: m.value.Value(),
+		}
+		if i-1 == l {
+			break
+		}
+		m.key.Next()
+		m.value.Next()
 	}
 	return kv
 }
 
 func (m *MapTreeReader) Value() interface{} {
+	if !m.BaseTreeReader.IsPresent() {
+		return nil
+	}
 	return m.Map()
 }
 
 func NewMapTreeReader(present, length io.Reader, key, value TreeReader, encoding *proto.ColumnEncoding) (*MapTreeReader, error) {
-	lengthReader, err := createIntegerReader(encoding.GetKind(), length, true, false)
+	lengthReader, err := createIntegerReader(encoding.GetKind(), length, false, false)
 	if err != nil {
 		return nil, err
 	}
@@ -481,7 +542,13 @@ type ListTreeReader struct {
 }
 
 func (r *ListTreeReader) Next() bool {
-	return r.BaseTreeReader.Next() && r.length.Next() && r.value.Next()
+	if !r.BaseTreeReader.Next() {
+		return false
+	}
+	if !r.BaseTreeReader.IsPresent() {
+		return true
+	}
+	return r.length.Next() && r.value.Next()
 }
 
 func (r *ListTreeReader) List() []interface{} {
@@ -500,6 +567,9 @@ func (r *ListTreeReader) List() []interface{} {
 }
 
 func (r *ListTreeReader) Value() interface{} {
+	if !r.BaseTreeReader.IsPresent() {
+		return nil
+	}
 	return r.List()
 }
 
@@ -534,6 +604,9 @@ func (s *StructTreeReader) Next() bool {
 	if !s.BaseTreeReader.Next() {
 		return false
 	}
+	if !s.BaseTreeReader.IsPresent() {
+		return true
+	}
 	for _, v := range s.children {
 		if !v.Next() {
 			return false
@@ -551,6 +624,9 @@ func (s *StructTreeReader) Struct() map[string]interface{} {
 }
 
 func (s *StructTreeReader) Value() interface{} {
+	if !s.BaseTreeReader.IsPresent() {
+		return nil
+	}
 	return s.Struct()
 }
 
@@ -577,11 +653,13 @@ type FloatTreeReader struct {
 	err           error
 }
 
-func (r *FloatTreeReader) IsPresent() bool {
-	return r.BaseTreeReader.IsPresent()
-}
-
 func (r *FloatTreeReader) Next() bool {
+	if !r.BaseTreeReader.Next() {
+		return false
+	}
+	if !r.BaseTreeReader.IsPresent() {
+		return true
+	}
 	return r.BaseTreeReader.Next()
 }
 
@@ -614,6 +692,9 @@ func (r *FloatTreeReader) Double() float64 {
 }
 
 func (r *FloatTreeReader) Value() interface{} {
+	if !r.BaseTreeReader.IsPresent() {
+		return nil
+	}
 	if r.bytesPerValue == 4 {
 		return r.Float()
 	}
@@ -644,7 +725,13 @@ type BinaryTreeReader struct {
 }
 
 func (r *BinaryTreeReader) Next() bool {
-	return r.BaseTreeReader.Next() && r.length.Next()
+	if !r.BaseTreeReader.Next() {
+		return false
+	}
+	if !r.BaseTreeReader.IsPresent() {
+		return true
+	}
+	return r.length.Next()
 }
 
 func (r *BinaryTreeReader) Binary() []byte {
@@ -660,6 +747,9 @@ func (r *BinaryTreeReader) Binary() []byte {
 }
 
 func (r *BinaryTreeReader) Value() interface{} {
+	if !r.BaseTreeReader.IsPresent() {
+		return nil
+	}
 	return r.Binary()
 }
 
@@ -704,11 +794,20 @@ func NewUnionTreeReader(present, data io.Reader, children []TreeReader) (*UnionT
 
 // Next returns true if another value is available.
 func (u *UnionTreeReader) Next() bool {
-	return u.BaseTreeReader.Next() && u.data.Next()
+	if !u.BaseTreeReader.Next() {
+		return false
+	}
+	if !u.BaseTreeReader.IsPresent() {
+		return true
+	}
+	return u.data.Next()
 }
 
 // Value returns the next value as an interface{}.
 func (u *UnionTreeReader) Value() interface{} {
+	if !u.BaseTreeReader.IsPresent() {
+		return nil
+	}
 	i := int(u.data.Byte())
 	if i >= len(u.children) {
 		u.err = fmt.Errorf("unexpected tag offset: %v expected < %v", i, len(u.children))
@@ -738,12 +837,14 @@ type DecimalTreeReader struct {
 	data      io.ByteReader
 	secondary IntegerReader
 	err       error
-	nextVal   float64
+	nextVal   Decimal
+	precision int
+	scale     int
 }
 
 // NewDecimalTreeReader returns a new instances of a DecimalTreeReader or an error if one occurs.
-func NewDecimalTreeReader(present, data, secondary io.Reader, encoding *proto.ColumnEncoding) (*DecimalTreeReader, error) {
-	ireader, err := createIntegerReader(encoding.GetKind(), secondary, false, false)
+func NewDecimalTreeReader(present, data, secondary io.Reader, encoding *proto.ColumnEncoding, precision, scale int) (*DecimalTreeReader, error) {
+	ireader, err := createIntegerReader(encoding.GetKind(), secondary, true, false)
 	if err != nil {
 		return nil, err
 	}
@@ -751,30 +852,44 @@ func NewDecimalTreeReader(present, data, secondary io.Reader, encoding *proto.Co
 		BaseTreeReader: NewBaseTreeReader(present),
 		data:           bufio.NewReader(data),
 		secondary:      ireader,
+		precision:      precision,
+		scale:          scale,
 	}, nil
 }
 
 // Next returns true if a value is available.
 func (d *DecimalTreeReader) Next() bool {
-	if d.BaseTreeReader.Next() && d.secondary.Next() {
-		i, err := binary.ReadVarint(d.data)
-		if err != nil {
-			d.err = err
-			return false
-		}
-		d.nextVal = float64(i) * math.Pow(10, -float64(d.secondary.Int()))
+	if !d.BaseTreeReader.Next() {
+		return false
+	}
+	if !d.BaseTreeReader.IsPresent() {
 		return true
 	}
-	return false
+	if !d.secondary.Next() {
+		return false
+	}
+	i, err := decodeBase128Varint(d.data)
+	if err != nil {
+		d.err = err
+		return false
+	}
+	d.nextVal = Decimal{
+		Abs: i,
+		Exp: d.secondary.Int(),
+	}
+	return true
 }
 
 // Decimal returns the next decimal value as a float64
-func (d *DecimalTreeReader) Decimal() float64 {
+func (d *DecimalTreeReader) Decimal() Decimal {
 	return d.nextVal
 }
 
 // Value returns the next decimal value as an interface{}
 func (d *DecimalTreeReader) Value() interface{} {
+	if !d.BaseTreeReader.IsPresent() {
+		return nil
+	}
 	return d.Decimal()
 }
 
