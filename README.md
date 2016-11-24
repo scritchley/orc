@@ -6,14 +6,29 @@
 
 ## Project Status
 
-This project is still a work in progress. The reader currently supports boolean, byte, short, int, long, string, varchar and char types.
+This project is still a work in progress.
 
-## supports
+## Current Support
 
-- Column Encodings:
-- Compression: NONE, ZLIB and SNAPPY are all supported.
+| Column Encoding           | Read | Write | Go Type                             |
+|---------------------------|------|-------|-------------------------------------|
+| SmallInt, Int, BigInt     | ✓    |       | int64                               |
+| Float, Double             | ✓    |       | float32, float64                    |
+| String, Char, and VarChar | ✓    |       | string                              |
+| Boolean                   | ✓    |       | bool                                |
+| TinyInt                   | ✓    |       | byte                                |
+| Binary                    | ✓    |       | []byte                              |
+| Decimal                   | ✓    |       | orc.Decimal                         |
+| Date                      | ✓    |       | orc.Date (time.Time)                |
+| Timestamp                 | ✓    |       | time.Time                           |
+| Struct                    | ✓    |       | orc.Struct (map[string]interface{}) |
+| List                      | ✓    |       | []interface{}                       |
+| Map                       | ✓    |       | []orc.MapEntry                      |
+| Union                     | ✓    |       | interface{}                         |
 
-### Example
+- The writer support is in its late stages, however, I do not recommend using it yet.
+
+## Example
 
     r, err := Open("./examples/demo-12-zlib.orc")
     if err != nil {
