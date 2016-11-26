@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"reflect"
 
 	"code.simon-critchley.co.uk/orc/proto"
 )
@@ -25,6 +26,8 @@ type TreeWriter interface {
 	Streams() []Stream
 	// RowIndex returns the RowIndex for the writer.
 	RowIndex() *proto.RowIndex
+	// RecordPositions
+	RecordPositions()
 	// Statistics
 	Statistics() ColumnStatistics
 }
@@ -70,10 +73,13 @@ func (b *BaseTreeWriter) positions() []uint64 {
 			positions = append(positions, recorder.Positions()...)
 		}
 	}
+	if !b.hasNull {
+		return positions[1:]
+	}
 	return positions
 }
 
-func (b *BaseTreeWriter) recordIndexEntry() {
+func (b *BaseTreeWriter) RecordPositions() {
 	b.indexEntries = append(b.indexEntries, &proto.RowIndexEntry{
 		Positions:  b.positions(),
 		Statistics: b.currentStatistics.Statistics(),
@@ -129,7 +135,6 @@ func (b *BaseTreeWriter) Close() error {
 
 // Flush flushes the underlying BufferedWriter returning an error if one occurs.
 func (b *BaseTreeWriter) Flush() error {
-	b.recordIndexEntry()
 	if err := b.present.Flush(); err != nil {
 		return err
 	}
@@ -361,6 +366,12 @@ func (s *StructTreeWriter) Encoding() *proto.ColumnEncoding {
 	}
 }
 
+func (s *StructTreeWriter) RecordPositions() {
+	for _, child := range s.children {
+		child.RecordPositions()
+	}
+}
+
 type BooleanTreeWriter struct {
 	BaseTreeWriter
 	*BooleanWriter
@@ -542,43 +553,43 @@ func NewStringTreeWriter(category Category, codec CompressionCodec) (*StringTree
 // WriteString writes a string value to the StringTreeWriter returning an error if one occurs.
 func (s *StringTreeWriter) WriteString(value string) error {
 
-	// If no mode is selected then just buffer the values
-	// and return nil
-	if !s.modeSelected {
-		s.numValues++
-		s.bufferedValues = append(s.bufferedValues, value)
-		return nil
-	}
+	// // If no mode is selected then just buffer the values
+	// // and return nil
+	// if !s.modeSelected {
+	// 	s.numValues++
+	// 	s.bufferedValues = append(s.bufferedValues, value)
+	// 	return nil
+	// }
 
-	// Get the existing size of the dictionary
-	existingSize := s.dictionary.Size()
-	// Get the index of the new value added to the dictionary.
-	index := s.dictionary.add(value)
+	// // Get the existing size of the dictionary
+	// existingSize := s.dictionary.Size()
+	// // Get the index of the new value added to the dictionary.
+	// index := s.dictionary.add(value)
 
-	// If dictionary encoding is being used, determine whether this is a new value,
-	// if so, write it to the dictionary data stream and length stream.
-	if s.isDictionaryEncoded {
-		// The value is new if its index is equal to the existing size of the
-		// dictionary.
-		if index == existingSize {
-			// Write the value to the dictionary stream.
-			n, err := s.dictionaryData.Write([]byte(value))
-			if err != nil {
-				return err
-			}
-			// Write the length of the value to the length stream.
-			err = s.lengthsIntWriter.WriteInt(int64(n))
-			if err != nil {
-				return err
-			}
-		}
-		// Write the dictionary encoded value to the data stream.
-		err := s.dictionaryEncodedData.WriteInt(int64(index))
-		if err != nil {
-			return err
-		}
-		return nil
-	}
+	// // If dictionary encoding is being used, determine whether this is a new value,
+	// // if so, write it to the dictionary data stream and length stream.
+	// if s.isDictionaryEncoded {
+	// 	// The value is new if its index is equal to the existing size of the
+	// 	// dictionary.
+	// 	if index == existingSize {
+	// 		// Write the value to the dictionary stream.
+	// 		n, err := s.dictionaryData.Write([]byte(value))
+	// 		if err != nil {
+	// 			return err
+	// 		}
+	// 		// Write the length of the value to the length stream.
+	// 		err = s.lengthsIntWriter.WriteInt(int64(n))
+	// 		if err != nil {
+	// 			return err
+	// 		}
+	// 	}
+	// 	// Write the dictionary encoded value to the data stream.
+	// 	err := s.dictionaryEncodedData.WriteInt(int64(index))
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	return nil
+	// }
 
 	// Write the value to the data stream
 	_, err := s.data.Write([]byte(value))
@@ -609,20 +620,20 @@ func (s *StringTreeWriter) Write(value interface{}) error {
 
 // Flush flushes the underlying writers returning an error if one occurs.
 func (s *StringTreeWriter) Flush() error {
-	if err := s.determineMode(); err != nil {
-		return err
-	}
-	if err := s.flushBufferedValues(); err != nil {
-		return err
-	}
-	if s.isDictionaryEncoded {
-		if err := s.dictionaryEncodedData.Flush(); err != nil {
-			return err
-		}
-		if err := s.dictionaryData.Flush(); err != nil {
-			return err
-		}
-	}
+	// if err := s.determineMode(); err != nil {
+	// 	return err
+	// }
+	// if err := s.flushBufferedValues(); err != nil {
+	// 	return err
+	// }
+	// if s.isDictionaryEncoded {
+	// 	if err := s.dictionaryEncodedData.Flush(); err != nil {
+	// 		return err
+	// 	}
+	// 	if err := s.dictionaryData.Flush(); err != nil {
+	// 		return err
+	// 	}
+	// }
 	if err := s.data.Flush(); err != nil {
 		return err
 	}
@@ -637,14 +648,14 @@ func (s *StringTreeWriter) Flush() error {
 
 // Close closes the underlying writes returning an error if one occurs.
 func (s *StringTreeWriter) Close() error {
-	if s.isDictionaryEncoded {
-		if err := s.dictionaryEncodedData.Close(); err != nil {
-			return err
-		}
-		if err := s.dictionaryData.Close(); err != nil {
-			return err
-		}
-	}
+	// if s.isDictionaryEncoded {
+	// 	if err := s.dictionaryEncodedData.Close(); err != nil {
+	// 		return err
+	// 	}
+	// 	if err := s.dictionaryData.Close(); err != nil {
+	// 		return err
+	// 	}
+	// }
 	if err := s.data.Close(); err != nil {
 		return err
 	}
@@ -665,16 +676,16 @@ func (s *StringTreeWriter) determineMode() error {
 		return nil
 	}
 	// Determine whether dictionary encoding should be used.
-	if s.useDictionaryEncoding() {
-		s.isDictionaryEncoded = true
-		var err error
-		// Create an IntegerWriter for the dictionary encoded column.
-		s.dictionaryEncodedData, err = createIntegerWriter(proto.ColumnEncoding_DICTIONARY_V2, s.data, false)
-		if err != nil {
-			return err
-		}
-		s.dictionaryData = s.BaseTreeWriter.AddStream(proto.Stream_DICTIONARY_DATA.Enum()).buffer
-	}
+	// if s.useDictionaryEncoding() {
+	// 	s.isDictionaryEncoded = true
+	// 	var err error
+	// 	// Create an IntegerWriter for the dictionary encoded column.
+	// 	s.dictionaryEncodedData, err = createIntegerWriter(proto.ColumnEncoding_DICTIONARY_V2, s.data, false)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	s.dictionaryData = s.BaseTreeWriter.AddStream(proto.Stream_DICTIONARY_DATA.Enum()).buffer
+	// }
 	s.modeSelected = true
 	return nil
 }
@@ -714,6 +725,186 @@ func (s *StringTreeWriter) Encoding() *proto.ColumnEncoding {
 			Kind: proto.ColumnEncoding_DICTIONARY_V2.Enum(),
 		}
 	}
+	return &proto.ColumnEncoding{
+		Kind: proto.ColumnEncoding_DIRECT_V2.Enum(),
+	}
+}
+
+type ListTreeWriter struct {
+	BaseTreeWriter
+	lengths IntegerWriter
+	child   TreeWriter
+	data    *BufferedWriter
+}
+
+func NewListTreeWriter(category Category, codec CompressionCodec, child TreeWriter) (*ListTreeWriter, error) {
+	base := NewBaseTreeWriter(category, codec)
+	data := base.AddStream(proto.Stream_LENGTH.Enum())
+	base.AddPositionRecorder(data)
+	// TODO: Inherit column encoding kind from orc.Writer ORC file version.
+	columnEncoding := proto.ColumnEncoding_DIRECT_V2
+	iwriter, err := createIntegerWriter(columnEncoding, data.buffer, false)
+	if err != nil {
+		return nil, err
+	}
+	l := &ListTreeWriter{
+		BaseTreeWriter: base,
+		lengths:        iwriter,
+		child:          child,
+		data:           data.buffer,
+	}
+	return l, nil
+}
+
+func (l *ListTreeWriter) Write(value interface{}) error {
+	if err := l.BaseTreeWriter.Write(value); err != nil {
+		return err
+	}
+	if value == nil {
+		return nil
+	}
+	switch reflect.TypeOf(value).Kind() {
+	case reflect.Slice:
+		s := reflect.ValueOf(value)
+		err := l.lengths.WriteInt(int64(s.Len()))
+		if err != nil {
+			return err
+		}
+		for i := 0; i < s.Len(); i++ {
+			err := l.child.Write(s.Index(i).Interface())
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		return fmt.Errorf("expected slice, received: %T", value)
+	}
+}
+
+func (l *ListTreeWriter) Flush() error {
+	if err := l.lengths.Flush(); err != nil {
+		return err
+	}
+	if err := l.child.Flush(); err != nil {
+		return err
+	}
+	if err := l.data.Flush(); err != nil {
+		return err
+	}
+	return l.BaseTreeWriter.Flush()
+}
+
+func (l *ListTreeWriter) Close() error {
+	if err := l.lengths.Close(); err != nil {
+		return err
+	}
+	if err := l.child.Close(); err != nil {
+		return err
+	}
+	if err := l.data.Close(); err != nil {
+		return err
+	}
+	return l.BaseTreeWriter.Close()
+}
+
+func (l *ListTreeWriter) Encoding() *proto.ColumnEncoding {
+	return &proto.ColumnEncoding{
+		Kind: proto.ColumnEncoding_DIRECT_V2.Enum(),
+	}
+}
+
+type MapTreeWriter struct {
+	BaseTreeWriter
+	lengths IntegerWriter
+	keys    TreeWriter
+	values  TreeWriter
+	data    *BufferedWriter
+}
+
+func NewMapTreeWriter(category Category, codec CompressionCodec, keyWriter, valueWriter TreeWriter) (*MapTreeWriter, error) {
+	base := NewBaseTreeWriter(category, codec)
+	data := base.AddStream(proto.Stream_LENGTH.Enum())
+	base.AddPositionRecorder(data)
+	// TODO: Inherit column encoding kind from orc.Writer ORC file version.
+	columnEncoding := proto.ColumnEncoding_DIRECT_V2
+	iwriter, err := createIntegerWriter(columnEncoding, data.buffer, true)
+	if err != nil {
+		return nil, err
+	}
+	l := &MapTreeWriter{
+		BaseTreeWriter: NewBaseTreeWriter(category, codec),
+		lengths:        iwriter,
+		keys:           keyWriter,
+		values:         valueWriter,
+		data:           data.buffer,
+	}
+	return l, nil
+}
+
+func (m *MapTreeWriter) Write(value interface{}) error {
+	if err := m.BaseTreeWriter.Write(value); err != nil {
+		return err
+	}
+	if value == nil {
+		return nil
+	}
+	switch reflect.TypeOf(value).Kind() {
+	case reflect.Map:
+		mm := reflect.ValueOf(value)
+		err := m.lengths.WriteInt(int64(mm.Len()))
+		if err != nil {
+			return err
+		}
+		for _, k := range mm.MapKeys() {
+			err := m.keys.Write(k.Interface())
+			if err != nil {
+				return err
+			}
+			err = m.values.Write(mm.MapIndex(k))
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		return fmt.Errorf("received type: %T not compatible with map column type", value)
+	}
+}
+
+func (m *MapTreeWriter) Flush() error {
+	if err := m.lengths.Flush(); err != nil {
+		return err
+	}
+	if err := m.keys.Flush(); err != nil {
+		return err
+	}
+	if err := m.values.Flush(); err != nil {
+		return err
+	}
+	if err := m.data.Flush(); err != nil {
+		return err
+	}
+	return m.BaseTreeWriter.Flush()
+}
+
+func (m *MapTreeWriter) Close() error {
+	if err := m.lengths.Close(); err != nil {
+		return err
+	}
+	if err := m.keys.Close(); err != nil {
+		return err
+	}
+	if err := m.values.Close(); err != nil {
+		return err
+	}
+	if err := m.data.Close(); err != nil {
+		return err
+	}
+	return m.BaseTreeWriter.Close()
+}
+
+func (m *MapTreeWriter) Encoding() *proto.ColumnEncoding {
 	return &proto.ColumnEncoding{
 		Kind: proto.ColumnEncoding_DIRECT_V2.Enum(),
 	}

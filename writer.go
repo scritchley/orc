@@ -106,6 +106,7 @@ func (w *Writer) Write(values ...interface{}) error {
 		return err
 	}
 	if w.totalRows%uint64(w.footer.GetRowIndexStride()) == 0 {
+		w.recordPositions()
 		if err := w.flushWriters(); err != nil {
 			return err
 		}
@@ -153,6 +154,10 @@ func (w *Writer) closeWriters() error {
 
 func (w *Writer) flushWriters() error {
 	return w.treeWriter.Flush()
+}
+
+func (w *Writer) recordPositions() {
+	w.treeWriter.RecordPositions()
 }
 
 func (w *Writer) writePostScript() error {
@@ -224,6 +229,7 @@ func (w *Writer) writeStripe() error {
 	err := w.treeWriters.forEach(func(id int, t TreeWriter) error {
 		// First write the rowIndex for the column.
 		rowIndex := t.RowIndex()
+		fmt.Println(rowIndex)
 		byt, err := gproto.Marshal(rowIndex)
 		if err != nil {
 			return err
@@ -322,6 +328,7 @@ func (w *Writer) writeStripe() error {
 }
 
 func (w *Writer) Close() error {
+	w.recordPositions()
 	if err := w.writeStripe(); err != nil {
 		return err
 	}

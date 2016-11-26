@@ -68,6 +68,8 @@ type stringPosition struct {
 }
 
 func NewStringPosition(value string) *stringPosition {
+	value = strings.ToLower(value)
+	value = strings.NewReplacer("\n", "", " ", "", "\t", "").Replace(value)
 	return &stringPosition{
 		value,
 		0,
@@ -140,7 +142,7 @@ func (s *stringPosition) parseName() (string, error) {
 
 func (s *stringPosition) requireChar(required rune) error {
 	if s.position >= s.length || []rune(s.value)[s.position] != required {
-		return fmt.Errorf("Missing required char '%s'", string(required))
+		return fmt.Errorf("Missing required char '%s' at position %v", string(required), s.position)
 	}
 	s.position += 1
 	return nil
@@ -299,6 +301,15 @@ func (s *stringPosition) parseType() (*TypeDescription, error) {
 			return nil, err
 		}
 		t, err := s.parseType()
+		if err != nil {
+			return nil, err
+		}
+		result.children = append(result.children, t)
+		err = s.requireChar(',')
+		if err != nil {
+			return nil, err
+		}
+		t, err = s.parseType()
 		if err != nil {
 			return nil, err
 		}
@@ -632,7 +643,7 @@ func (t *TypeDescription) Type() *proto.Type {
 	return &proto.Type{
 		Kind:          t.category.typeKind,
 		FieldNames:    t.fieldNames,
-		Subtypes:      children[:len(t.fieldNames)],
+		Subtypes:      children[:len(ids)],
 		Precision:     &precision,
 		Scale:         &scale,
 		MaximumLength: &maxLength,
@@ -671,6 +682,7 @@ func createList(child *TypeDescription) (*TypeDescription, error) {
 		SetCategory(CategoryList),
 	)
 	if err != nil {
+		fmt.Println(err)
 		return nil, err
 	}
 	err = td.addChild(child)

@@ -191,9 +191,14 @@ type DateTreeReader struct {
 	*IntegerTreeReader
 }
 
+// Date is a date value represented by an underlying time.Time.
+type Date struct {
+	time.Time
+}
+
 // Date returns the next date value as a time.Time.
-func (d *DateTreeReader) Date() time.Time {
-	return time.Unix(86400*d.Int(), 0)
+func (d *DateTreeReader) Date() Date {
+	return Date{time.Unix(86400*d.Int(), 0).In(time.UTC)}
 }
 
 // Value implements the TreeReader interface.
@@ -264,6 +269,9 @@ func (s *StringDirectTreeReader) Next() bool {
 func (s *StringDirectTreeReader) String() string {
 	l := int(s.length.Int())
 	byt := make([]byte, l, l)
+	if l == 0 {
+		return ""
+	}
 	n, err := s.data.Read(byt)
 	if err != nil {
 		s.err = err
@@ -475,6 +483,7 @@ func NewByteTreeReader(present, data io.Reader, encoding *proto.ColumnEncoding) 
 	}, nil
 }
 
+// MapTreeReader is a TreeReader that reads from map encoded columns.
 type MapTreeReader struct {
 	BaseTreeReader
 	length IntegerReader
@@ -482,6 +491,7 @@ type MapTreeReader struct {
 	value  TreeReader
 }
 
+// Next returns true if another row is available.
 func (m *MapTreeReader) Next() bool {
 	if !m.BaseTreeReader.Next() {
 		return false
@@ -492,16 +502,18 @@ func (m *MapTreeReader) Next() bool {
 	return m.length.Next() && m.key.Next() && m.value.Next()
 }
 
-type mapTreeReaderEntry struct {
+// MapEntry is an individual entry in a Map.
+type MapEntry struct {
 	Key   interface{} `json:"key"`
 	Value interface{} `json:"value"`
 }
 
-func (m *MapTreeReader) Map() []mapTreeReaderEntry {
+// Map returns the next available row of MapEntries.
+func (m *MapTreeReader) Map() []MapEntry {
 	l := int(m.length.Int())
-	kv := make([]mapTreeReaderEntry, l)
+	kv := make([]MapEntry, l)
 	for i := 0; i < l; i++ {
-		kv[i] = mapTreeReaderEntry{
+		kv[i] = MapEntry{
 			Key:   m.key.Value(),
 			Value: m.value.Value(),
 		}
@@ -514,6 +526,7 @@ func (m *MapTreeReader) Map() []mapTreeReaderEntry {
 	return kv
 }
 
+// Value implements the TreeReader interface, returning the next available row.
 func (m *MapTreeReader) Value() interface{} {
 	if !m.BaseTreeReader.IsPresent() {
 		return nil
@@ -521,6 +534,7 @@ func (m *MapTreeReader) Value() interface{} {
 	return m.Map()
 }
 
+// NewMapTreeReader returns a new instance of a MapTreeReader.
 func NewMapTreeReader(present, length io.Reader, key, value TreeReader, encoding *proto.ColumnEncoding) (*MapTreeReader, error) {
 	lengthReader, err := createIntegerReader(encoding.GetKind(), length, false, false)
 	if err != nil {
@@ -615,7 +629,9 @@ func (s *StructTreeReader) Next() bool {
 	return true
 }
 
-func (s *StructTreeReader) Struct() map[string]interface{} {
+type Struct map[string]interface{}
+
+func (s *StructTreeReader) Struct() Struct {
 	st := make(map[string]interface{})
 	for k, v := range s.children {
 		st[k] = v.Value()
@@ -803,6 +819,11 @@ func (u *UnionTreeReader) Next() bool {
 	return u.data.Next()
 }
 
+type UnionValue struct {
+	Tag   int         `json:"tag"`
+	Value interface{} `json:"value"`
+}
+
 // Value returns the next value as an interface{}.
 func (u *UnionTreeReader) Value() interface{} {
 	if !u.BaseTreeReader.IsPresent() {
@@ -813,7 +834,10 @@ func (u *UnionTreeReader) Value() interface{} {
 		u.err = fmt.Errorf("unexpected tag offset: %v expected < %v", i, len(u.children))
 	}
 	if u.children[i].Next() {
-		return u.children[i].Value()
+		return UnionValue{
+			i,
+			u.children[i].Value(),
+		}
 	}
 	return fmt.Errorf("no value available in union child column: %v", i)
 }

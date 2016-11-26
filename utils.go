@@ -245,11 +245,11 @@ func percentileBits(data []int64, offset int, length int, p float64) int {
 		hist[idx]++
 	}
 
-	perLen := length * int(1.0-p)
+	perLen := float64(length) * (1.0 - p)
 
 	// return the bits required by pth percentile length
 	for i := len(hist) - 1; i >= 0; i-- {
-		perLen -= hist[i]
+		perLen -= float64(hist[i])
 		if perLen < 0 {
 			return decodeBitWidth(i)
 		}

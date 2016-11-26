@@ -33,6 +33,34 @@ func TestReadExamples(t *testing.T) {
 			expected: "orc-file-11-format.jsn.gz",
 			example:  "orc-file-11-format.orc",
 		},
+		{
+			expected: "TestOrcFile.emptyFile.jsn.gz",
+			example:  "TestOrcFile.emptyFile.orc",
+		},
+		{
+			expected: "nulls-at-end-snappy.jsn.gz",
+			example:  "nulls-at-end-snappy.orc",
+		},
+		// {
+		// 	expected: "TestOrcFile.testUnionAndTimestamp.jsn.gz",
+		// 	example:  "TestOrcFile.testUnionAndTimestamp.orc",
+		// },
+		{
+			expected: "TestOrcFile.testSnappy.jsn.gz",
+			example:  "TestOrcFile.testSnappy.orc",
+		},
+		// {
+		// 	expected: "TestOrcFile.testDate2038.jsn.gz",
+		// 	example:  "TestOrcFile.testDate2038.orc",
+		// },
+		// {
+		// 	expected: "TestOrcFile.testDate1900.jsn.gz",
+		// 	example:  "TestOrcFile.testDate1900.orc",
+		// },
+		// {
+		// 	expected: "over1k_bloom.jsn.gz",
+		// 	example:  "over1k_bloom.orc",
+		// },
 	}
 
 	for _, tc := range testCases {
@@ -49,28 +77,31 @@ func TestReadExamples(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			t.Log(r.Schema())
+			// Log out the schema description, helps in the event of a test failure.
+			t.Log(r.Schema().String())
 
 			c := r.Select("*")
 
 			var rowNum int
 			for c.Stripes() {
 				for c.Next() {
-					rowData := c.Row()[0].(map[string]interface{})
+					rowData := c.Row()[0].(Struct)
 					// We have to perform some coercion so that the values match
-					// the JSON values in the terribly formatted example files.
-					for i := range rowData {
-						switch v := rowData[i].(type) {
+					// the JSON values in the formatted example files.
+					for col, val := range rowData {
+						switch ty := val.(type) {
 						case int64:
-							rowData[i] = float64(v)
+							rowData[col] = float64(ty)
+						case Date:
+							rowData[col] = ty.UTC().Format("2006-01-02")
 						case time.Time:
-							rowData[i] = v.UTC().Format("2006-01-02 15:04:05.0") // Java JSON Serde timestamp format
+							rowData[col] = ty.UTC().Format("2006-01-02 15:04:05.0")
 						case []byte:
-							values := make([]uint, len(v))
-							for j := range v {
-								values[j] = uint(v[j])
+							values := make([]uint, len(ty))
+							for j := range ty {
+								values[j] = uint(ty[j])
 							}
-							rowData[i] = values
+							rowData[col] = values
 						}
 					}
 					row, err := json.Marshal(rowData)

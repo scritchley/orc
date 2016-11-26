@@ -29,8 +29,8 @@ func (d Decimal) MarshalJSON() ([]byte, error) {
 	return json.Marshal(d.Float64())
 }
 
-// decodeBase128Varint decodes an unbounded Base128 varint from r, returning
-// a big.Int or an error.
+// decodeBase128Varint decodes an unbounded Base128 varint
+// from r, returning a big.Int or an error.
 func decodeBase128Varint(r io.ByteReader) (*big.Int, error) {
 	var b []byte
 	for {
