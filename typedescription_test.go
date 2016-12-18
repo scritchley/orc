@@ -40,6 +40,25 @@ func TestTypeDescriptionParse(t *testing.T) {
 		t.Errorf("Test failed, expected %s got %s", expected, td.ToJSON())
 	}
 
+	description = NewStringPosition(`STRUCT<
+		f1: MAP<STRING,STRING>
+	>`)
+
+	td, err = description.parseType()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected = `struct<f1:map<string,string>>`
+	if td.String() != expected {
+		t.Errorf("Test failed, expected %s got %s", expected, td.String())
+	}
+
+	expectedJSON = `{"category": "struct", "id": 0, "max": 3, "fields": {"f1": {"category": "map", "id": 1, "max": 3, "children": [{"category": "string", "id": 2, "max": 2},{"category": "string", "id": 3, "max": 3}]}}}`
+	if td.ToJSON() != expectedJSON {
+		t.Errorf("Test failed, expected %s got %s", expected, td.ToJSON())
+	}
+
 }
 
 func TestTypeDescriptionPrint(t *testing.T) {

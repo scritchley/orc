@@ -8,14 +8,17 @@ import (
 
 func TestCursor(t *testing.T) {
 
-	r, err := Open("./examples/orc-file-11-format.orc")
+	r, err := Open("./examples/demo-11-zlib.orc")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer r.Close()
 
+	// Log the schema
+	t.Log(r.Schema())
+
 	// Select a single column from the file.
-	c := r.Select("boolean1")
+	c := r.Select("_col0")
 
 	// Call Stripes to trigger reading the first stripe.
 	s := c.Stripes()

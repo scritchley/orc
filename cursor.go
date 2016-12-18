@@ -2,6 +2,7 @@ package orc
 
 import (
 	"fmt"
+	"io"
 )
 
 // Cursor is used for iterating through the stripes and
@@ -116,6 +117,9 @@ func (c *Cursor) Scan(dest ...interface{}) error {
 
 // Err returns the last error to have occurred.
 func (c *Cursor) Err() error {
+	if c.err == io.EOF {
+		return nil
+	}
 	// Check whether there is already an error.
 	if c.err != nil {
 		return c.err

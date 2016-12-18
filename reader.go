@@ -261,14 +261,6 @@ func (r *Reader) getStreams(included ...int) (streamMap, error) {
 				kind:     stream.GetKind(),
 			}
 			streams.set(name, &streamBuf)
-			// REMOVE
-			// if stream.GetKind() == proto.Stream_ROW_INDEX {
-			// 	var rowIndex proto.RowIndex
-			// 	err = gproto.Unmarshal(streamBuf.Bytes(), &rowIndex)
-			// 	if err != nil {
-			// 		return nil, err
-			// 	}
-			// }
 		}
 		// Increment the streamOffset for the next stream.
 		streamOffset += streamLength
@@ -373,7 +365,22 @@ func (r *Reader) createSchema(types []*proto.Type, rootColumn int) (*TypeDescrip
 		}
 		return createMap(key, value)
 	case proto.Type_UNION:
-		return NewTypeDescription(SetCategory(CategoryUnion))
+		td, err := NewTypeDescription(SetCategory(CategoryUnion))
+		if err != nil {
+			return nil, err
+		}
+		subTypes := root.GetSubtypes()
+		for f := 0; f < len(subTypes); f++ {
+			child, err := r.createSchema(types, int(subTypes[f]))
+			if err != nil {
+				return nil, err
+			}
+			err = td.addUnionChild(child)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return td, nil
 	case proto.Type_STRUCT:
 		td, err = NewTypeDescription(SetCategory(CategoryStruct))
 		if err != nil {
@@ -381,7 +388,7 @@ func (r *Reader) createSchema(types []*proto.Type, rootColumn int) (*TypeDescrip
 		}
 		subTypes := root.GetSubtypes()
 		fieldNames := root.GetFieldNames()
-		for f := 0; f < len(fieldNames); f++ {
+		for f := 0; f < len(subTypes); f++ {
 			child, err := r.createSchema(types, int(subTypes[f]))
 			if err != nil {
 				return nil, err

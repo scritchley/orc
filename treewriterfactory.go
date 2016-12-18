@@ -50,6 +50,34 @@ func createTreeWriter(codec CompressionCodec, schema *TypeDescription, writers w
 		if err != nil {
 			return nil, err
 		}
+	case CategoryList:
+		if len(schema.children) != 1 {
+			return nil, fmt.Errorf("unexpected number of children for list column, expected 1 got %v", len(schema.children))
+		}
+		child, err := createTreeWriter(codec, schema.children[0], writers)
+		if err != nil {
+			return nil, err
+		}
+		treeWriter, err = NewListTreeWriter(category, codec, child)
+		if err != nil {
+			return nil, err
+		}
+	case CategoryMap:
+		if len(schema.children) != 2 {
+			return nil, fmt.Errorf("unexpected number of children for map column, expected 2 got %v", len(schema.children))
+		}
+		keyWriter, err := createTreeWriter(codec, schema.children[0], writers)
+		if err != nil {
+			return nil, err
+		}
+		valueWriter, err := createTreeWriter(codec, schema.children[1], writers)
+		if err != nil {
+			return nil, err
+		}
+		treeWriter, err = NewMapTreeWriter(category, codec, keyWriter, valueWriter)
+		if err != nil {
+			return nil, err
+		}
 	default:
 		return nil, fmt.Errorf("unsupported type: %s", category)
 	}

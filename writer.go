@@ -11,7 +11,7 @@ import (
 
 var (
 	magic                              = "ORC"
-	stripeTargetSize            int64  = 200 * 1024 * 1024
+	DefaultStripeTargetSize     int64  = 200 * 1024 * 1024
 	DefaultCompressionChunkSize uint64 = 256 * 1024
 	DefaultRowIndexStride       uint32 = 10000
 )
@@ -54,21 +54,24 @@ func SetSchema(schema *TypeDescription) WriterConfigFunc {
 	}
 }
 
+// NewWriter returns a new ORC file writer that writes to the provided io.Writer.
 func NewWriter(w io.Writer, fns ...WriterConfigFunc) (*Writer, error) {
+	// Construct the initial writer config, including the initial footer,
+	// postscript and metadata sections.
 	writer := &Writer{
 		w:                w,
 		stripeOffset:     uint64(len(magic)),
-		stripeTargetSize: stripeTargetSize,
+		stripeTargetSize: DefaultStripeTargetSize,
 		streams:          make(streamWriterMap),
 		statistics:       make(statisticsMap),
 		indexes:          make(map[int]*proto.RowIndex),
 		footer: &proto.Footer{
-			RowIndexStride: &DefaultRowIndexStride,
+			RowIndexStride: ptrUint32(DefaultRowIndexStride),
 			Statistics:     []*proto.ColumnStatistics{},
 		},
 		postScript: &proto.PostScript{
-			Magic:                &magic,
-			CompressionBlockSize: &DefaultCompressionChunkSize,
+			Magic:                ptrStr(magic),
+			CompressionBlockSize: ptrUint64(DefaultCompressionChunkSize),
 			Compression:          proto.CompressionKind_NONE.Enum(),
 			Version:              []uint32{Version0_12.major, Version0_12.minor},
 		},
@@ -76,12 +79,14 @@ func NewWriter(w io.Writer, fns ...WriterConfigFunc) (*Writer, error) {
 			StripeStats: []*proto.StripeStatistics{},
 		},
 	}
+	// Apply any WriterConfigFuncs to the new writer.
 	for _, fn := range fns {
 		err := fn(writer)
 		if err != nil {
 			return nil, err
 		}
 	}
+	// Initialise the ORC file.
 	err := writer.init()
 	if err != nil {
 		return nil, err
@@ -106,6 +111,7 @@ func (w *Writer) Write(values ...interface{}) error {
 		return err
 	}
 	if w.totalRows%uint64(w.footer.GetRowIndexStride()) == 0 {
+		w.recordPositions()
 		if err := w.flushWriters(); err != nil {
 			return err
 		}
@@ -153,6 +159,10 @@ func (w *Writer) closeWriters() error {
 
 func (w *Writer) flushWriters() error {
 	return w.treeWriter.Flush()
+}
+
+func (w *Writer) recordPositions() {
+	w.treeWriter.RecordPositions()
 }
 
 func (w *Writer) writePostScript() error {
@@ -253,9 +263,9 @@ func (w *Writer) writeStripe() error {
 			// Get the length of the stream and its kind.
 			length := stream.buffer.Len()
 			kind := *stream.kind
-			// If the stream has zero length after closing
-			// then ignore it and continue to the next stream.
-			if length == 0 {
+			// If the stream is optional and has zero length after
+			// closing then ignore it and continue to the next stream.
+			if isOptionalStream(*stream.kind) && length == 0 {
 				continue
 			}
 			streamInfo := &proto.Stream{
@@ -322,6 +332,7 @@ func (w *Writer) writeStripe() error {
 }
 
 func (w *Writer) Close() error {
+	w.recordPositions()
 	if err := w.writeStripe(); err != nil {
 		return err
 	}
@@ -343,4 +354,17 @@ func ptrUint32(u uint32) *uint32 {
 
 func ptrUint64(u uint64) *uint64 {
 	return &u
+}
+
+func ptrStr(s string) *string {
+	return &s
+}
+
+func isOptionalStream(kind proto.Stream_Kind) bool {
+	switch kind {
+	case proto.Stream_PRESENT, proto.Stream_BLOOM_FILTER:
+		return true
+	default:
+		return false
+	}
 }

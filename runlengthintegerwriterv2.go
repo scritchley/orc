@@ -413,15 +413,16 @@ func (i *RunLengthIntegerWriterV2) computeZigZagLiterals() {
 }
 
 func (i *RunLengthIntegerWriterV2) preparePatchedBlob() {
+
 	// mask will be max value beyond which patch will be generated
-	mask := (1 << uint64(i.brBits95p)) - 1
+	mask := (int64(1) << uint64(i.brBits95p)) - 1
 
 	// since we are considering only 95 percentile, the size of gap and
 	// patch array can contain only be 5% values
 	i.patchLength = int(math.Ceil(float64(i.numLiterals) * 0.05))
 
-	gapList := make([]int, i.patchLength, i.patchLength)
-	patchList := make([]int64, i.patchLength, i.patchLength)
+	var gapList []int
+	var patchList []int64
 
 	// #bit for patch
 	i.patchWidth = i.brBits100p - i.brBits95p
@@ -436,15 +437,13 @@ func (i *RunLengthIntegerWriterV2) preparePatchedBlob() {
 		mask = (1 << uint64(i.brBits95p)) - 1
 	}
 
-	gapIdx := 0
-	patchIdx := 0
 	prev := 0
 	gap := 0
 	maxGap := 0
 
 	for j := 0; j < i.numLiterals; j++ {
 		// if value is above mask then create the patch and record the gap
-		if i.baseRedLiterals[j] > int64(mask) {
+		if i.baseRedLiterals[j] > mask {
 			gap = j - prev
 			if gap > maxGap {
 				maxGap = gap
@@ -452,13 +451,11 @@ func (i *RunLengthIntegerWriterV2) preparePatchedBlob() {
 
 			// gaps are relative, so store the previous patched value index
 			prev = j
-			gapList[gapIdx] = gap
-			gapIdx++
+			gapList = append(gapList, gap)
 
 			// extract the most significant bits that are over mask bits
 			patch := int64(uint64(i.baseRedLiterals[j]) >> uint64(i.brBits95p))
-			patchList[patchIdx] = patch
-			patchIdx++
+			patchList = append(patchList, patch)
 
 			// strip off the MSB to enable safe bit packing
 			i.baseRedLiterals[j] &= int64(mask)
@@ -466,7 +463,7 @@ func (i *RunLengthIntegerWriterV2) preparePatchedBlob() {
 	}
 
 	// adjust the patch length to number of entries in gap list
-	i.patchLength = gapIdx
+	i.patchLength = len(gapList)
 
 	// if the element to be patched is the first and only element then
 	// max gap will be 0, but to store the gap as 0 we need atleast 1 bit
@@ -499,8 +496,8 @@ func (i *RunLengthIntegerWriterV2) preparePatchedBlob() {
 	}
 
 	// create gap vs patch list
-	gapIdx = 0
-	patchIdx = 0
+	gapIdx := 0
+	patchIdx := 0
 	i.gapVsPatchList = make([]int64, i.patchLength, i.patchLength)
 	for j := 0; j < i.patchLength; j++ {
 		g := gapList[gapIdx]
@@ -514,7 +511,7 @@ func (i *RunLengthIntegerWriterV2) preparePatchedBlob() {
 		}
 
 		// store patch value in LSBs and gap in MSBs
-		i.gapVsPatchList[j] = int64(g<<uint64(i.patchWidth)) | p
+		i.gapVsPatchList[j] = int64(g<<uint64(i.patchWidth)) | int64(p)
 	}
 
 }
