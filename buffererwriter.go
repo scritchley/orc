@@ -49,7 +49,7 @@ func (b *BufferedWriter) Positions() []uint64 {
 	case CompressionNone:
 		checkpoint := b.checkpoint
 		b.checkpoint = b.written
-		return []uint64{checkpoint, 0}
+		return []uint64{checkpoint}
 	default:
 		return nil
 	}

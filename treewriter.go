@@ -508,7 +508,7 @@ const (
 	// InitialDictionarySize is the initial size used when creating the dictionary.
 	InitialDictionarySize = 4096
 	// DictionaryEncodingThreshold is the threshold ratio of unique items to the total count of items.
-	DictionaryEncodingThreshold = 0.1
+	DictionaryEncodingThreshold = 0.49
 )
 
 // StringTreeWriter is a TreeWriter implementation that writes to a string type column. It dynamically selects
@@ -521,7 +521,7 @@ type StringTreeWriter struct {
 	lengths               *BufferedWriter
 	lengthsIntWriter      IntegerWriter
 	dictionaryEncodedData IntegerWriter
-	dictionary            *Dictionary
+	dictionary            *DictionaryV2
 	bufferedValues        []string
 	numValues             int
 	modeSelected          bool
@@ -545,64 +545,16 @@ func NewStringTreeWriter(category Category, codec CompressionCodec) (*StringTree
 		lengths:          lengths.buffer,
 		lengthsIntWriter: lengthsIntegerWriter,
 		bufferedValues:   make([]string, 0),
-		dictionary:       NewDictionary(InitialDictionarySize),
+		dictionary:       NewDictionaryV2(),
 	}
 	return s, nil
 }
 
 // WriteString writes a string value to the StringTreeWriter returning an error if one occurs.
 func (s *StringTreeWriter) WriteString(value string) error {
-
-	// // If no mode is selected then just buffer the values
-	// // and return nil
-	// if !s.modeSelected {
-	// 	s.numValues++
-	// 	s.bufferedValues = append(s.bufferedValues, value)
-	// 	return nil
-	// }
-
-	// // Get the existing size of the dictionary
-	// existingSize := s.dictionary.Size()
-	// // Get the index of the new value added to the dictionary.
-	// index := s.dictionary.add(value)
-
-	// // If dictionary encoding is being used, determine whether this is a new value,
-	// // if so, write it to the dictionary data stream and length stream.
-	// if s.isDictionaryEncoded {
-	// 	// The value is new if its index is equal to the existing size of the
-	// 	// dictionary.
-	// 	if index == existingSize {
-	// 		// Write the value to the dictionary stream.
-	// 		n, err := s.dictionaryData.Write([]byte(value))
-	// 		if err != nil {
-	// 			return err
-	// 		}
-	// 		// Write the length of the value to the length stream.
-	// 		err = s.lengthsIntWriter.WriteInt(int64(n))
-	// 		if err != nil {
-	// 			return err
-	// 		}
-	// 	}
-	// 	// Write the dictionary encoded value to the data stream.
-	// 	err := s.dictionaryEncodedData.WriteInt(int64(index))
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	return nil
-	// }
-
-	// Write the value to the data stream
-	_, err := s.data.Write([]byte(value))
-	if err != nil {
-		return err
-	}
-
-	// Write the length of the value to the length stream.
-	err = s.lengthsIntWriter.WriteInt(int64(len(value)))
-	if err != nil {
-		return err
-	}
-
+	s.numValues++
+	s.bufferedValues = append(s.bufferedValues, value)
+	s.dictionary.add(value)
 	return nil
 }
 
@@ -618,75 +570,80 @@ func (s *StringTreeWriter) Write(value interface{}) error {
 	return fmt.Errorf("expected string value, received: %T", value)
 }
 
-// Flush flushes the underlying writers returning an error if one occurs.
 func (s *StringTreeWriter) Flush() error {
-	// if err := s.determineMode(); err != nil {
-	// 	return err
-	// }
-	// if err := s.flushBufferedValues(); err != nil {
-	// 	return err
-	// }
-	// if s.isDictionaryEncoded {
-	// 	if err := s.dictionaryEncodedData.Flush(); err != nil {
-	// 		return err
-	// 	}
-	// 	if err := s.dictionaryData.Flush(); err != nil {
-	// 		return err
-	// 	}
-	// }
-	if err := s.data.Flush(); err != nil {
-		return err
-	}
-	if err := s.lengthsIntWriter.Flush(); err != nil {
-		return err
-	}
-	if err := s.BaseTreeWriter.Flush(); err != nil {
-		return err
-	}
-	return s.lengths.Flush()
+	return nil
 }
 
 // Close closes the underlying writes returning an error if one occurs.
 func (s *StringTreeWriter) Close() error {
-	// if s.isDictionaryEncoded {
-	// 	if err := s.dictionaryEncodedData.Close(); err != nil {
-	// 		return err
-	// 	}
-	// 	if err := s.dictionaryData.Close(); err != nil {
-	// 		return err
-	// 	}
-	// }
+	if err := s.flushBufferedValues(); err != nil {
+		return err
+	}
+	if s.isDictionaryEncoded {
+		if err := s.dictionaryEncodedData.Close(); err != nil {
+			return err
+		}
+		if err := s.dictionaryData.Close(); err != nil {
+			return err
+		}
+	}
 	if err := s.data.Close(); err != nil {
 		return err
 	}
 	if err := s.lengthsIntWriter.Close(); err != nil {
 		return err
 	}
-	if err := s.BaseTreeWriter.Close(); err != nil {
+	if err := s.lengths.Close(); err != nil {
 		return err
 	}
-	return s.lengths.Close()
+	return s.BaseTreeWriter.Close()
 }
 
-// determineMode determines the mode of encoding to use when writing the values to the underlying
-// streams. Once a mode is selected it cannot be altered until the next stripe is started.
-func (s *StringTreeWriter) determineMode() error {
-	// If the mode is already selected then return immediately.
-	if s.modeSelected {
-		return nil
+func (s *StringTreeWriter) flushDictionaryValues() error {
+	// Flush the dictionary data itself to the dictionary data stream.
+	s.dictionaryData = s.BaseTreeWriter.AddStream(proto.Stream_DICTIONARY_DATA.Enum()).buffer
+	err := s.dictionary.forEach(func(value string) error {
+		_, err := s.dictionaryData.Write([]byte(value))
+		if err != nil {
+			return err
+		}
+		return s.lengthsIntWriter.WriteInt(int64(len(value)))
+	})
+	if err != nil {
+		return err
 	}
-	// Determine whether dictionary encoding should be used.
-	// if s.useDictionaryEncoding() {
-	// 	s.isDictionaryEncoded = true
-	// 	var err error
-	// 	// Create an IntegerWriter for the dictionary encoded column.
-	// 	s.dictionaryEncodedData, err = createIntegerWriter(proto.ColumnEncoding_DICTIONARY_V2, s.data, false)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	s.dictionaryData = s.BaseTreeWriter.AddStream(proto.Stream_DICTIONARY_DATA.Enum()).buffer
-	// }
-	s.modeSelected = true
+	// Create an IntegerWriter for the dictionary encoded column and write the buffered values.
+	s.dictionaryEncodedData, err = createIntegerWriter(proto.ColumnEncoding_DICTIONARY_V2, s.data, false)
+	if err != nil {
+		return err
+	}
+	for _, value := range s.bufferedValues {
+		i, ok := s.dictionary.get(value)
+		if !ok {
+			return fmt.Errorf("value: %s not found in dictionary", value)
+		}
+		err := s.dictionaryEncodedData.WriteInt(int64(i))
+		if err != nil {
+			return err
+		}
+	}
+	// Finally reset to the buffered values and dictionary ready for the next stripe.
+	s.bufferedValues = nil
+	s.dictionary.reset()
+	return nil
+}
+
+func (s *StringTreeWriter) flushDirectValues() error {
+	for _, value := range s.bufferedValues {
+		_, err := s.data.Write([]byte(value))
+		if err != nil {
+			return err
+		}
+		err = s.lengthsIntWriter.WriteInt(int64(len(value)))
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -694,28 +651,19 @@ func (s *StringTreeWriter) determineMode() error {
 // called immediately after the writers mode has been determined so that the values are encoded using the
 // appropriate method of either direct or dictionary encoding.
 func (s *StringTreeWriter) flushBufferedValues() error {
-	if len(s.bufferedValues) > 0 {
-		for i := range s.bufferedValues {
-			err := s.WriteString(s.bufferedValues[i])
-			if err != nil {
-				return err
-			}
-		}
+	if s.useDictionaryEncoding() {
+		return s.flushDictionaryValues()
 	}
-	s.bufferedValues = nil
-	return nil
+	return s.flushDirectValues()
 }
 
 func (s *StringTreeWriter) useDictionaryEncoding() bool {
 	// TODO: find better way to determine whether dictionary encoding should be
 	// used. Currently this method is creating a new dictionary and using
 	// it to check the cardinality against the threshold value.
-	dict := NewDictionary(InitialDictionarySize)
-	for i := range s.bufferedValues {
-		dict.add(s.bufferedValues[i])
-	}
-	return float64(dict.Size())/float64(s.numValues) <= DictionaryEncodingThreshold
-	// return false
+	// s.isDictionaryEncoded = float64(s.dictionary.size())/float64(s.numValues) <= DictionaryEncodingThreshold
+	// return s.isDictionaryEncoded
+	return false
 }
 
 // Encoding returns the column encoding for the writer, either DICTIONARY_V2 or DIRECT_V2.

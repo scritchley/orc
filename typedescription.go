@@ -491,6 +491,14 @@ func (t *TypeDescription) getChildrenIDs() []int {
 	return ids
 }
 
+func (t *TypeDescription) getSubtypes() []int {
+	var ids []int
+	for _, child := range t.children {
+		ids = append(ids, child.getID())
+	}
+	return ids
+}
+
 func (t *TypeDescription) getCategory() Category {
 	return t.category
 }
@@ -600,10 +608,16 @@ func (t *TypeDescription) printJSONToBuffer(prefix string, buf *bytes.Buffer, in
 	buf.WriteString(`}`)
 }
 
+// ToJSON returns a json encoded string of t.
 func (t *TypeDescription) ToJSON() string {
 	var buf bytes.Buffer
 	t.printJSONToBuffer("", &buf, 0)
 	return buf.String()
+}
+
+// MarshalJSON returns a json encoded byte slice of t.
+func (t *TypeDescription) MarshalJSON() ([]byte, error) {
+	return []byte(t.ToJSON()), nil
 }
 
 func (t *TypeDescription) GetField(fieldName string) (*TypeDescription, error) {
@@ -632,7 +646,7 @@ func (t *TypeDescription) GetField(fieldName string) (*TypeDescription, error) {
 }
 
 func (t *TypeDescription) Type() *proto.Type {
-	ids := t.getChildrenIDs()
+	ids := t.getSubtypes()
 	children := make([]uint32, len(ids))
 	precision := uint32(t.precision)
 	scale := uint32(t.scale)
@@ -643,7 +657,7 @@ func (t *TypeDescription) Type() *proto.Type {
 	return &proto.Type{
 		Kind:          t.category.typeKind,
 		FieldNames:    t.fieldNames,
-		Subtypes:      children[:len(ids)],
+		Subtypes:      children,
 		Precision:     &precision,
 		Scale:         &scale,
 		MaximumLength: &maxLength,

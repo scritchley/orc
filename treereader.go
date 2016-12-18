@@ -38,7 +38,7 @@ func NewBaseTreeReader(r io.Reader) BaseTreeReader {
 	return BaseTreeReader{NewBooleanReader(bufio.NewReader(r))}
 }
 
-// IsPresent returns true if a value is available and is present in the stream.
+// Next returns the next available value.
 func (b BaseTreeReader) Next() bool {
 	if b.BooleanReader != nil {
 		return b.BooleanReader.Next()
@@ -363,6 +363,9 @@ func (s *StringDictionaryTreeReader) readDictionaryLength(length io.Reader, enco
 }
 
 func (s *StringDictionaryTreeReader) Next() bool {
+	if s.err != nil {
+		return false
+	}
 	if !s.BaseTreeReader.Next() {
 		return false
 	}
@@ -385,8 +388,15 @@ func (s *StringDictionaryTreeReader) getIndexLength(i int) (int, int) {
 }
 
 func (s *StringDictionaryTreeReader) String() string {
-	i := int(s.reader.Int())
-	offset, length := s.getIndexLength(i)
+	if len(s.dictionaryBytes) == 0 {
+		return ""
+	}
+	v := s.reader.Value()
+	if v == nil {
+		return ""
+	}
+	i := v.(int64)
+	offset, length := s.getIndexLength(int(i))
 	if offset > len(s.dictionaryBytes) || offset+length > len(s.dictionaryBytes) {
 		s.err = fmt.Errorf("invalid offset:%v or length:%v, greater than dictionary size:%v", offset, length, len(s.dictionaryBytes))
 		return ""
@@ -562,20 +572,23 @@ func (r *ListTreeReader) Next() bool {
 	if !r.BaseTreeReader.IsPresent() {
 		return true
 	}
-	return r.length.Next() && r.value.Next()
+	return r.length.Next()
 }
 
 func (r *ListTreeReader) List() []interface{} {
 	l := int(r.length.Int())
 	ls := make([]interface{}, l, l)
+	if l == 0 {
+		return ls
+	}
 	for i := range ls {
-		ls[i] = r.value.Value()
 		if !r.value.Next() {
 			if err := r.Err(); err != nil {
 				r.err = err
 			}
 			break
 		}
+		ls[i] = r.value.Value()
 	}
 	return ls
 }
@@ -679,7 +692,7 @@ func (r *FloatTreeReader) Next() bool {
 	return r.BaseTreeReader.Next()
 }
 
-func (r *FloatTreeReader) Float() float32 {
+func (r *FloatTreeReader) Float() Float {
 	bs := make([]byte, r.bytesPerValue, r.bytesPerValue)
 	n, err := r.Reader.Read(bs)
 	if err != nil {
@@ -690,10 +703,14 @@ func (r *FloatTreeReader) Float() float32 {
 		r.err = fmt.Errorf("read unexpected number of bytes: %v, expected:%v", n, r.bytesPerValue)
 		return 0
 	}
-	return math.Float32frombits(binary.LittleEndian.Uint32(bs))
+	return Float(math.Float32frombits(binary.LittleEndian.Uint32(bs)))
 }
 
-func (r *FloatTreeReader) Double() float64 {
+// Double is ORC double type i.e. a float64.
+type Double float64
+
+// Double returns the next Double value.
+func (r *FloatTreeReader) Double() Double {
 	bs := make([]byte, r.bytesPerValue, r.bytesPerValue)
 	n, err := r.Reader.Read(bs)
 	if err != nil {
@@ -704,7 +721,7 @@ func (r *FloatTreeReader) Double() float64 {
 		r.err = fmt.Errorf("read unexpected number of bytes: %v, expected:%v", n, r.bytesPerValue)
 		return 0
 	}
-	return math.Float64frombits(binary.LittleEndian.Uint64(bs))
+	return Double(math.Float64frombits(binary.LittleEndian.Uint64(bs)))
 }
 
 func (r *FloatTreeReader) Value() interface{} {

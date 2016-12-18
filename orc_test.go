@@ -57,10 +57,10 @@ func TestReadExamples(t *testing.T) {
 		// 	expected: "TestOrcFile.testDate1900.jsn.gz",
 		// 	example:  "TestOrcFile.testDate1900.orc",
 		// },
-		// {
-		// 	expected: "over1k_bloom.jsn.gz",
-		// 	example:  "over1k_bloom.orc",
-		// },
+		{
+			expected: "TestOrcFile.columnProjection.jsn.gz",
+			example:  "TestOrcFile.columnProjection.orc",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -90,8 +90,6 @@ func TestReadExamples(t *testing.T) {
 					// the JSON values in the formatted example files.
 					for col, val := range rowData {
 						switch ty := val.(type) {
-						case int64:
-							rowData[col] = float64(ty)
 						case Date:
 							rowData[col] = ty.UTC().Format("2006-01-02")
 						case time.Time:

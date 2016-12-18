@@ -261,11 +261,6 @@ func (r *Reader) getStreams(included ...int) (streamMap, error) {
 				kind:     stream.GetKind(),
 			}
 			streams.set(name, &streamBuf)
-			if stream.GetKind() == proto.Stream_ROW_INDEX {
-				var ri proto.RowIndex
-				gproto.Unmarshal(streamBuf.Bytes(), &ri)
-				fmt.Println(stream.GetColumn(), &ri)
-			}
 		}
 		// Increment the streamOffset for the next stream.
 		streamOffset += streamLength
@@ -393,7 +388,7 @@ func (r *Reader) createSchema(types []*proto.Type, rootColumn int) (*TypeDescrip
 		}
 		subTypes := root.GetSubtypes()
 		fieldNames := root.GetFieldNames()
-		for f := 0; f < len(fieldNames); f++ {
+		for f := 0; f < len(subTypes); f++ {
 			child, err := r.createSchema(types, int(subTypes[f]))
 			if err != nil {
 				return nil, err
