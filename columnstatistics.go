@@ -70,8 +70,11 @@ type BaseStatistics struct {
 }
 
 func NewBaseStatistics() BaseStatistics {
+	var hasNull bool
 	return BaseStatistics{
-		&proto.ColumnStatistics{},
+		&proto.ColumnStatistics{
+			HasNull: &hasNull,
+		},
 	}
 }
 
