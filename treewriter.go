@@ -526,6 +526,7 @@ type StringTreeWriter struct {
 	numValues             int
 	modeSelected          bool
 	isDictionaryEncoded   bool
+	dictionarySize        uint32
 }
 
 // NewStringTreeWriter returns a new StringTreeWriter or an error if one occurs.
@@ -535,17 +536,12 @@ func NewStringTreeWriter(category Category, codec CompressionCodec) (*StringTree
 	base.AddPositionRecorder(data)
 	lengths := base.AddStream(proto.Stream_LENGTH.Enum())
 	base.AddPositionRecorder(lengths)
-	lengthsIntegerWriter, err := createIntegerWriter(proto.ColumnEncoding_DIRECT_V2, lengths.buffer, false)
-	if err != nil {
-		return nil, err
-	}
 	s := &StringTreeWriter{
-		BaseTreeWriter:   base,
-		data:             data.buffer,
-		lengths:          lengths.buffer,
-		lengthsIntWriter: lengthsIntegerWriter,
-		bufferedValues:   make([]string, 0),
-		dictionary:       NewDictionaryV2(),
+		BaseTreeWriter: base,
+		data:           data.buffer,
+		lengths:        lengths.buffer,
+		bufferedValues: make([]string, 0),
+		dictionary:     NewDictionaryV2(),
 	}
 	return s, nil
 }
@@ -600,20 +596,29 @@ func (s *StringTreeWriter) Close() error {
 }
 
 func (s *StringTreeWriter) flushDictionaryValues() error {
+	var err error
 	// Flush the dictionary data itself to the dictionary data stream.
-	s.dictionaryData = s.BaseTreeWriter.AddStream(proto.Stream_DICTIONARY_DATA.Enum()).buffer
-	err := s.dictionary.forEach(func(value string) error {
+	dictionaryData := s.BaseTreeWriter.AddStream(proto.Stream_DICTIONARY_DATA.Enum())
+	s.AddPositionRecorder(dictionaryData)
+	s.dictionaryData = dictionaryData.buffer
+	// Create an IntegerWriter for the dictionary encoded column and write the buffered values.
+	s.dictionaryEncodedData, err = createIntegerWriter(proto.ColumnEncoding_DICTIONARY_V2, s.data, false)
+	if err != nil {
+		return err
+	}
+	s.lengthsIntWriter, err = createIntegerWriter(proto.ColumnEncoding_DICTIONARY_V2, s.lengths, false)
+	if err != nil {
+		return err
+	}
+	// Prepare the dictionary.
+	s.dictionary.prepare()
+	err = s.dictionary.forEach(func(value string) error {
 		_, err := s.dictionaryData.Write([]byte(value))
 		if err != nil {
 			return err
 		}
 		return s.lengthsIntWriter.WriteInt(int64(len(value)))
 	})
-	if err != nil {
-		return err
-	}
-	// Create an IntegerWriter for the dictionary encoded column and write the buffered values.
-	s.dictionaryEncodedData, err = createIntegerWriter(proto.ColumnEncoding_DICTIONARY_V2, s.data, false)
 	if err != nil {
 		return err
 	}
@@ -629,11 +634,18 @@ func (s *StringTreeWriter) flushDictionaryValues() error {
 	}
 	// Finally reset to the buffered values and dictionary ready for the next stripe.
 	s.bufferedValues = nil
+	s.numValues = 0
+	s.dictionarySize = uint32(s.dictionary.size())
 	s.dictionary.reset()
 	return nil
 }
 
 func (s *StringTreeWriter) flushDirectValues() error {
+	var err error
+	s.lengthsIntWriter, err = createIntegerWriter(proto.ColumnEncoding_DIRECT_V2, s.lengths, false)
+	if err != nil {
+		return err
+	}
 	for _, value := range s.bufferedValues {
 		_, err := s.data.Write([]byte(value))
 		if err != nil {
@@ -661,16 +673,16 @@ func (s *StringTreeWriter) useDictionaryEncoding() bool {
 	// TODO: find better way to determine whether dictionary encoding should be
 	// used. Currently this method is creating a new dictionary and using
 	// it to check the cardinality against the threshold value.
-	// s.isDictionaryEncoded = float64(s.dictionary.size())/float64(s.numValues) <= DictionaryEncodingThreshold
-	// return s.isDictionaryEncoded
-	return false
+	s.isDictionaryEncoded = float64(s.dictionary.size())/float64(s.numValues) <= DictionaryEncodingThreshold
+	return s.isDictionaryEncoded
 }
 
 // Encoding returns the column encoding for the writer, either DICTIONARY_V2 or DIRECT_V2.
 func (s *StringTreeWriter) Encoding() *proto.ColumnEncoding {
 	if s.isDictionaryEncoded {
 		return &proto.ColumnEncoding{
-			Kind: proto.ColumnEncoding_DICTIONARY_V2.Enum(),
+			Kind:           proto.ColumnEncoding_DICTIONARY_V2.Enum(),
+			DictionarySize: &s.dictionarySize,
 		}
 	}
 	return &proto.ColumnEncoding{
