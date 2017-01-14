@@ -1,7 +1,7 @@
 package orc
 
 import (
-	"code.simon-critchley.co.uk/orc/proto"
+	"github.com/scritchley/orc/proto"
 )
 
 type statisticsMap map[int]ColumnStatistics

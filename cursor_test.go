@@ -3,7 +3,7 @@ package orc
 import (
 	"testing"
 
-	"code.simon-critchley.co.uk/orc/proto"
+	"github.com/scritchley/orc/proto"
 )
 
 func TestCursor(t *testing.T) {
