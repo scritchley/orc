@@ -150,7 +150,7 @@ func (t *TimestampTreeReader) Next() bool {
 
 // ValueTimestamp returns the next timestamp value.
 func (t *TimestampTreeReader) Timestamp() time.Time {
-	return time.Unix(TimestampBaseSeconds+t.data.Int(), t.secondary.Int())
+	return time.Unix(TimestampBaseSeconds+t.data.Int(), t.secondary.Int()).UTC()
 }
 
 // Value implements the TreeReader interface.
@@ -198,7 +198,7 @@ type Date struct {
 
 // Date returns the next date value as a time.Time.
 func (d *DateTreeReader) Date() Date {
-	return Date{time.Unix(86400*d.Int(), 0).In(time.UTC)}
+	return Date{time.Unix(86400*d.Int(), 0).UTC()}
 }
 
 // Value implements the TreeReader interface.
