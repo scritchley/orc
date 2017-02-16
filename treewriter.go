@@ -7,7 +7,7 @@ import (
 	"math"
 	"reflect"
 
-	"code.simon-critchley.co.uk/orc/proto"
+	"github.com/scritchley/orc/proto"
 )
 
 // TreeWriter is an interface for writing to a stream.

@@ -10,7 +10,7 @@ import (
 	"math"
 	"time"
 
-	"code.simon-critchley.co.uk/orc/proto"
+	"github.com/scritchley/orc/proto"
 )
 
 var (
