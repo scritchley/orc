@@ -1,6 +1,6 @@
 # orc
 
-[![Build Status](https://drone.io/github.com/scritchley/orc/status.png)](https://drone.io/github.com/scritchley/orc/latest)
+[![Build Status](https://travis-ci.org/scritchley/orc.svg?branch=master)](https://travis-ci.org/scritchley/orc)
 [![code-coverage](http://gocover.io/_badge/code.simon-critchley.co.uk/orc)](http://gocover.io/code.simon-critchley.co.uk/orc)
 [![go-doc](https://godoc.org/code.simon-critchley.co.uk/orc?status.svg)](https://godoc.org/code.simon-critchley.co.uk/orc)
 
