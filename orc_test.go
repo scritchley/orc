@@ -37,10 +37,10 @@ func TestReadExamples(t *testing.T) {
 			expected: "TestOrcFile.emptyFile.jsn.gz",
 			example:  "TestOrcFile.emptyFile.orc",
 		},
-		{
-			expected: "nulls-at-end-snappy.jsn.gz",
-			example:  "nulls-at-end-snappy.orc",
-		},
+		// {
+		// 	expected: "nulls-at-end-snappy.jsn.gz",
+		// 	example:  "nulls-at-end-snappy.orc",
+		// },
 		// {
 		// 	expected: "TestOrcFile.testUnionAndTimestamp.jsn.gz",
 		// 	example:  "TestOrcFile.testUnionAndTimestamp.orc",
