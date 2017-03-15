@@ -1,7 +1,8 @@
 language: go
 
 go:
-  - 1.7.x
+  - 1.7
+  - 1.8
   - master
   
 go_import_path: code.simon-critchley.co.uk/orc
