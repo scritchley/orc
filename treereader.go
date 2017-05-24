@@ -150,7 +150,15 @@ func (t *TimestampTreeReader) Next() bool {
 
 // ValueTimestamp returns the next timestamp value.
 func (t *TimestampTreeReader) Timestamp() time.Time {
-	return time.Unix(TimestampBaseSeconds+t.data.Int(), t.secondary.Int()).UTC()
+	nanos := t.secondary.Int()
+	zeros := nanos & 0x7
+	nanos = nanos >> 3
+	if zeros != 0 {
+		for i := int64(0); i <= zeros; i++ {
+			nanos = nanos * 10
+		}
+	}
+	return time.Unix(TimestampBaseSeconds+t.data.Int(), nanos).UTC()
 }
 
 // Value implements the TreeReader interface.
@@ -175,7 +183,7 @@ func NewTimestampTreeReader(present, data, secondary io.Reader, encoding *proto.
 	if err != nil {
 		return nil, err
 	}
-	secondaryReader, err := createIntegerReader(encoding.GetKind(), secondary, true, false)
+	secondaryReader, err := createIntegerReader(encoding.GetKind(), secondary, false, false)
 	if err != nil {
 		return nil, err
 	}
