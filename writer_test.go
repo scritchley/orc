@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"os"
 	"time"
 	// "encoding/json"
 	"math/rand"
-	"os"
 	"testing"
 )
 
@@ -25,13 +26,13 @@ func (b *bytesSizedReaderAt) ReadAt(p []byte, off int64) (int, error) {
 }
 
 func TestWriter(t *testing.T) {
-
-	filename := "./testorc"
-
-	f, err := os.Create(filename)
+	f, err := ioutil.TempFile("", "testorc")
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	filename := f.Name()
+	defer os.Remove(filename) // clean up
 	defer f.Close()
 
 	// schema, err := ParseSchema("struct<string1:string,int1:int,boolean1:boolean>")
