@@ -1202,3 +1202,19 @@ func zigzagEncode(i int64) uint64 {
 func zigzagDecode(i uint64) int64 {
 	return int64((i >> 1) ^ uint64((int64(i&1)<<63)>>63))
 }
+
+func formatNanos(nanos int64) int64 {
+	if nanos == 0 {
+		return 0
+	} else if nanos%100 != 0 {
+		return nanos << 3
+	} else {
+		nanos /= 100
+		trailingZeros := int64(1)
+		for nanos%10 == 0 && trailingZeros < 7 {
+			nanos /= 10
+			trailingZeros++
+		}
+		return nanos<<3 | trailingZeros
+	}
+}
