@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"reflect"
+	"time"
 
 	"github.com/scritchley/orc/proto"
 )
@@ -865,6 +866,133 @@ func (m *MapTreeWriter) Close() error {
 }
 
 func (m *MapTreeWriter) Encoding() *proto.ColumnEncoding {
+	return &proto.ColumnEncoding{
+		Kind: proto.ColumnEncoding_DIRECT_V2.Enum(),
+	}
+}
+
+// TimestampWriter is an interface implemented by all Timestamp type writers.
+type TimestampWriter interface {
+	WriteTimestamp(value time.Time) error
+	Close() error
+	Flush() error
+}
+
+// TimestampTreeWriter is a TreeWriter implementation that writes an Timestamp type column.
+type TimestampTreeWriter struct {
+	BaseTreeWriter
+	data               *BufferedWriter
+	secondary          *BufferedWriter
+	dataIntWriter      IntegerWriter
+	secondaryIntWriter IntegerWriter
+}
+
+// NewTimestampTreeWriter returns a new TimestampTreeWriter.
+func NewTimestampTreeWriter(category Category, codec CompressionCodec) (*TimestampTreeWriter, error) {
+	base := NewBaseTreeWriter(category, codec)
+	data := base.AddStream(proto.Stream_DATA.Enum())
+	base.AddPositionRecorder(data)
+	secondary := base.AddStream(proto.Stream_SECONDARY.Enum())
+	base.AddPositionRecorder(secondary)
+
+	dataIntWriter, err := createIntegerWriter(proto.ColumnEncoding_DIRECT_V2, data.buffer, true)
+	if err != nil {
+		return nil, err
+	}
+
+	secondaryIntWriter, err := createIntegerWriter(proto.ColumnEncoding_DIRECT_V2, secondary.buffer, false)
+	if err != nil {
+		return nil, err
+	}
+
+	return &TimestampTreeWriter{
+		BaseTreeWriter:     base,
+		data:               data.buffer,
+		secondary:          secondary.buffer,
+		dataIntWriter:      dataIntWriter,
+		secondaryIntWriter: secondaryIntWriter,
+	}, nil
+}
+
+// WriteTimestamp writes an Timestamp value returning an error if one occurs.
+func (w *TimestampTreeWriter) WriteTimestamp(value time.Time) error {
+	secs := value.Unix() - TimestampBaseSeconds
+	if err := w.dataIntWriter.WriteInt(secs); err != nil {
+		return err
+	}
+
+	nanos := value.Nanosecond()
+	if err := w.secondaryIntWriter.WriteInt(formatNanos(int64(nanos))); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Write writes a value returning an error if one occurs. It accepts any form of
+// Timestamp or a nil value for writing nulls to the stream. Any other types will
+// return an error.
+func (w *TimestampTreeWriter) Write(value interface{}) error {
+	switch t := value.(type) {
+	case nil:
+		// If the value is nil, return with no error. The value is null
+		// and a false value will have been written to the present stream.
+		// First write the value to the present column.
+		if err := w.BaseTreeWriter.Write(value); err != nil {
+			return err
+		}
+		return nil
+	case time.Time:
+		// First write the value to the present column.
+		//TODO: CHECK IF THIS IS THE RIGHT VALUE
+		if err := w.BaseTreeWriter.Write(t); err != nil {
+			return err
+		}
+		return w.WriteTimestamp(t)
+	default:
+		return fmt.Errorf("cannot write %T to Timestamp column type", t)
+	}
+}
+
+// Close closes the underlying writers returning an error if one occurs.
+func (w *TimestampTreeWriter) Close() error {
+	if err := w.Flush(); err != nil {
+		return err
+	}
+
+	if err := w.dataIntWriter.Close(); err != nil {
+		return err
+	}
+
+	if err := w.data.Close(); err != nil {
+		return err
+	}
+
+	if err := w.secondaryIntWriter.Close(); err != nil {
+		return err
+	}
+
+	if err := w.secondary.Close(); err != nil {
+		return err
+	}
+
+	return w.BaseTreeWriter.Close()
+}
+
+// Flush flushes the underlying writers returning an error if one occurs.
+func (w *TimestampTreeWriter) Flush() error {
+	if err := w.dataIntWriter.Flush(); err != nil {
+		return err
+	}
+
+	if err := w.secondaryIntWriter.Flush(); err != nil {
+		return err
+	}
+
+	return w.BaseTreeWriter.Flush()
+}
+
+// Encoding returns the column encoding used for the TimestampTreeWriter.
+func (w *TimestampTreeWriter) Encoding() *proto.ColumnEncoding {
 	return &proto.ColumnEncoding{
 		Kind: proto.ColumnEncoding_DIRECT_V2.Enum(),
 	}
