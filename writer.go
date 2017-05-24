@@ -1,11 +1,11 @@
 package orc
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 
 	gproto "github.com/golang/protobuf/proto"
-
 	"github.com/scritchley/orc/proto"
 )
 
@@ -38,6 +38,7 @@ type Writer struct {
 	indexes           map[int]*proto.RowIndex
 	indexOffset       uint64
 	chunkOffset       uint64
+	compressionCodec  CompressionCodec
 }
 
 func ptrInt64(i int64) *int64 {
@@ -50,6 +51,25 @@ func SetSchema(schema *TypeDescription) WriterConfigFunc {
 	return func(w *Writer) error {
 		w.schema = schema
 		w.footer.Types = w.schema.Types()
+		return nil
+	}
+}
+
+func SetCompression(codec CompressionCodec) WriterConfigFunc {
+	return func(w *Writer) error {
+		switch codec.(type) {
+		case nil:
+		case CompressionNone:
+		case CompressionSnappy:
+			return fmt.Errorf("Unknown compression codec type %T", codec)
+			// w.postScript.Compression = proto.CompressionKind_SNAPPY.Enum()
+		case CompressionZlib:
+			w.postScript.Compression = proto.CompressionKind_ZLIB.Enum()
+		default:
+			return fmt.Errorf("Unknown compression codec type %T", codec)
+		}
+
+		w.compressionCodec = codec
 		return nil
 	}
 }
@@ -78,7 +98,9 @@ func NewWriter(w io.Writer, fns ...WriterConfigFunc) (*Writer, error) {
 		metadata: &proto.Metadata{
 			StripeStats: []*proto.StripeStatistics{},
 		},
+		compressionCodec: CompressionNone{},
 	}
+
 	// Apply any WriterConfigFuncs to the new writer.
 	for _, fn := range fns {
 		err := fn(writer)
@@ -94,15 +116,6 @@ func NewWriter(w io.Writer, fns ...WriterConfigFunc) (*Writer, error) {
 	return writer, nil
 }
 
-func (w *Writer) getCodec() (CompressionCodec, error) {
-	switch kind := w.postScript.GetCompression(); kind {
-	case proto.CompressionKind_NONE:
-		return CompressionNone{}, nil
-	default:
-		return nil, fmt.Errorf("unsupported compression kind %s", kind)
-	}
-}
-
 func (w *Writer) Write(values ...interface{}) error {
 	w.stripeRows++
 	w.totalRows++
@@ -111,7 +124,6 @@ func (w *Writer) Write(values ...interface{}) error {
 		return err
 	}
 	if w.totalRows%uint64(w.footer.GetRowIndexStride()) == 0 {
-		w.recordPositions()
 		if err := w.flushWriters(); err != nil {
 			return err
 		}
@@ -141,12 +153,9 @@ func (w *Writer) initOrc() error {
 }
 
 func (w *Writer) initWriters() error {
+	var err error
 	w.treeWriters = make(writerMap)
-	codec, err := w.getCodec()
-	if err != nil {
-		return err
-	}
-	w.treeWriter, err = createTreeWriter(codec, w.schema, w.treeWriters)
+	w.treeWriter, err = createTreeWriter(w.compressionCodec, w.schema, w.treeWriters)
 	if err != nil {
 		return err
 	}
@@ -154,11 +163,18 @@ func (w *Writer) initWriters() error {
 }
 
 func (w *Writer) closeWriters() error {
+	if err := w.flushWriters(); err != nil {
+		return err
+	}
 	return w.treeWriter.Close()
 }
 
 func (w *Writer) flushWriters() error {
-	return w.treeWriter.Flush()
+	if err := w.treeWriter.Flush(); err != nil {
+		return err
+	}
+	w.recordPositions()
+	return nil
 }
 
 func (w *Writer) recordPositions() {
@@ -173,9 +189,12 @@ func (w *Writer) writePostScript() error {
 	if len(byt) > maxPostScriptSize {
 		return fmt.Errorf("postscript larger than max allowed size of %v bytes: %v", maxPostScriptSize, len(byt))
 	}
-	_, err = w.w.Write(byt)
+	n, err := w.w.Write(byt)
 	if err != nil {
 		return err
+	}
+	if n != len(byt) {
+		return fmt.Errorf("Expected to write a postcript with %d bytes, but wrote %d", len(byt), n)
 	}
 	// Write the length of the post script in the last byte
 	_, err = w.w.Write([]byte{byte(len(byt))})
@@ -193,12 +212,31 @@ func (w *Writer) writeFooter() error {
 	if err != nil {
 		return err
 	}
-	footerLength := uint64(len(byt))
-	w.postScript.FooterLength = &footerLength
-	_, err = w.w.Write(byt)
+
+	var buf bytes.Buffer
+
+	f := w.compressionCodec.Encoder(&buf)
+	n, err := f.Write(byt)
 	if err != nil {
 		return err
 	}
+	if n != len(byt) {
+		return fmt.Errorf("Expected to write %d bytes, wrote %d", len(byt), n)
+	}
+
+	err = f.Close()
+	if err != nil {
+		return err
+	}
+
+	nCompressed, err := io.Copy(w.w, &buf)
+	if err != nil {
+		return err
+	}
+
+	footerLength := uint64(nCompressed)
+	w.postScript.FooterLength = &footerLength
+
 	return nil
 }
 
@@ -207,12 +245,31 @@ func (w *Writer) writeMetadata() error {
 	if err != nil {
 		return err
 	}
-	metadataLength := uint64(len(byt))
-	w.postScript.MetadataLength = &metadataLength
-	_, err = w.w.Write(byt)
+
+	var buf bytes.Buffer
+
+	f := w.compressionCodec.Encoder(&buf)
+	n, err := f.Write(byt)
 	if err != nil {
 		return err
 	}
+	if n != len(byt) {
+		return fmt.Errorf("Expected to write %d bytes, wrote %d", len(byt), n)
+	}
+
+	err = f.Close()
+	if err != nil {
+		return err
+	}
+
+	nCompressed, err := io.Copy(w.w, &buf)
+	if err != nil {
+		return err
+	}
+
+	metadataLength := uint64(nCompressed)
+	w.postScript.MetadataLength = &metadataLength
+
 	return nil
 }
 
@@ -229,6 +286,8 @@ func (w *Writer) writeStripe() error {
 	var stripeDataLength uint64
 	stripeStatistics := make(statisticsMap)
 
+	buf := &bytes.Buffer{}
+
 	// Iterate through the TreeWriters and write their output
 	// to the underlying writer.
 	err := w.treeWriters.forEach(func(id int, t TreeWriter) error {
@@ -238,17 +297,38 @@ func (w *Writer) writeStripe() error {
 		if err != nil {
 			return err
 		}
-		stripeIndexLength += uint64(len(byt))
-		streamInfo := &proto.Stream{
-			Column: ptrUint32(uint32(id)),
-			Kind:   proto.Stream_ROW_INDEX.Enum(),
-			Length: ptrUint64(uint64(len(byt))),
-		}
-		streams = append(streams, streamInfo)
-		_, err = w.w.Write(byt)
+		encoder := w.compressionCodec.Encoder(buf)
+
+		n, err := encoder.Write(byt)
 		if err != nil {
 			return err
 		}
+		if n != len(byt) {
+			return fmt.Errorf("Expected to write %d bytes, wrote %d", len(byt), n)
+		}
+
+		err = encoder.Close()
+		if err != nil {
+			return err
+		}
+
+		l := buf.Len()
+		nn, err := io.Copy(w.w, buf)
+		if err != nil {
+			return err
+		}
+
+		if int(nn) != l {
+			return fmt.Errorf("Expected to write %d bytes, wrote %d", l, nn)
+		}
+
+		stripeIndexLength += uint64(l)
+		streamInfo := &proto.Stream{
+			Column: ptrUint32(uint32(id)),
+			Kind:   proto.Stream_ROW_INDEX.Enum(),
+			Length: ptrUint64(uint64(l)),
+		}
+		streams = append(streams, streamInfo)
 		// Add to the running stripe statistics.
 		stripeStatistics.add(id, t.Statistics())
 		return nil
@@ -275,7 +355,7 @@ func (w *Writer) writeStripe() error {
 			}
 			stripeDataLength += uint64(length)
 			streams = append(streams, streamInfo)
-			_, err := stream.buffer.WriteTo(w.w)
+			_, err := io.Copy(w.w, stream.buffer)
 			if err != nil {
 				return err
 			}
@@ -296,10 +376,29 @@ func (w *Writer) writeStripe() error {
 	if err != nil {
 		return err
 	}
-	_, err = w.w.Write(byt)
+
+	encoder := w.compressionCodec.Encoder(buf)
+	nn, err := encoder.Write(byt)
 	if err != nil {
 		return err
 	}
+	if nn != len(byt) {
+		return fmt.Errorf("Expected to write %d bytes, wrote %d", len(byt), nn)
+	}
+	err = encoder.Close()
+	if err != nil {
+		return err
+	}
+
+	l := buf.Len()
+	n, err := io.Copy(w.w, buf)
+	if err != nil {
+		return err
+	}
+	if int(n) != l {
+		return fmt.Errorf("Expected to write %d bytes, wrote %d", l, n)
+	}
+	buf.Reset()
 
 	stripeRows := w.stripeRows
 	// Reset the stripe rows ready for the next stripe.
@@ -307,7 +406,7 @@ func (w *Writer) writeStripe() error {
 	w.stripeIndexOffset = 0
 
 	// Append stripe information to the footer
-	footerLength := uint64(len(byt))
+	footerLength := uint64(l)
 	offset := w.stripeOffset
 	w.footer.Stripes = append(w.footer.Stripes, &proto.StripeInformation{
 		Offset:       &offset,
@@ -332,7 +431,6 @@ func (w *Writer) writeStripe() error {
 }
 
 func (w *Writer) Close() error {
-	w.recordPositions()
 	if err := w.writeStripe(); err != nil {
 		return err
 	}
