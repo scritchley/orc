@@ -78,6 +78,11 @@ func createTreeWriter(codec CompressionCodec, schema *TypeDescription, writers w
 		if err != nil {
 			return nil, err
 		}
+	case CategoryTimestamp:
+		treeWriter, err = NewTimestampTreeWriter(category, codec)
+		if err != nil {
+			return nil, err
+		}
 	default:
 		return nil, fmt.Errorf("unsupported type: %s", category)
 	}

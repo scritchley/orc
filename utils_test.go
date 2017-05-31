@@ -71,3 +71,21 @@ func BenchmarkzigzagDecodeeger(b *testing.B) {
 		zigzagDecode(uint64(i))
 	}
 }
+
+func TestFormatNanos(t *testing.T) {
+	testCases := []struct {
+		input    int64
+		expected int64
+	}{
+		{99, 0x0318},
+		{100, 0x09},
+		{1000, 0x0a},
+		{100000, 0x0c},
+	}
+	for _, v := range testCases {
+		output := formatNanos(v.input)
+		if output != v.expected {
+			t.Errorf("Input: %d. Expected %x got %x", v.input, v.expected, output)
+		}
+	}
+}
