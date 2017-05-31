@@ -9,6 +9,7 @@ import (
 	"time"
 	// "encoding/json"
 	"math/rand"
+	"reflect"
 	"testing"
 )
 
@@ -118,6 +119,54 @@ func TestWriter(t *testing.T) {
 
 	if row != length {
 		t.Errorf("Test failed, expected %v rows got %v", length, row)
+	}
+
+}
+
+func TestWriteNil(t *testing.T) {
+
+	f, err := ioutil.TempFile("", "testwritenil")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	filename := f.Name()
+	defer f.Close()
+	defer os.Remove(filename)
+
+	schema, err := ParseSchema("struct<string1:string,int1:int,double1:double,timestamp1:timestamp,boolean1:boolean>")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w, err := NewWriter(f, SetSchema(schema))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = w.Write(nil, nil, nil, nil, nil)
+	if err != nil {
+		t.Errorf("Test failed, expected no error, got %v", err)
+	}
+
+	err = w.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := Open(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := r.Select("string1", "int1", "double1", "timestamp1", "boolean1")
+	expected := []interface{}{nil, nil, nil, nil, nil}
+	for c.Stripes() {
+		for c.Next() {
+			actual := c.Row()
+			if !reflect.DeepEqual(actual, expected) {
+				t.Errorf("Test failed, expected %v, got %v", expected, actual)
+			}
+		}
 	}
 
 }

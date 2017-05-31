@@ -453,6 +453,9 @@ func (f *FloatTreeWriter) Write(value interface{}) error {
 	if err := f.BaseTreeWriter.Write(value); err != nil {
 		return err
 	}
+	if value == nil {
+		return nil
+	}
 	if f.bytesPerValue == 8 {
 		return f.WriteDouble(value)
 	}
@@ -563,6 +566,9 @@ func (s *StringTreeWriter) Write(value interface{}) error {
 			return err
 		}
 		return s.WriteString(str)
+	}
+	if value == nil {
+		return s.BaseTreeWriter.Write(value)
 	}
 	return fmt.Errorf("expected string value, received: %T", value)
 }
