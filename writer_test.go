@@ -261,6 +261,89 @@ func TestWriteNil(t *testing.T) {
 
 }
 
+func TestSingleIntegerColumnSequential(t *testing.T) {
+	f, err := ioutil.TempFile("", "testorc")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	filename := f.Name()
+	defer os.Remove(filename) // clean up
+	defer f.Close()
+
+	schema, err := ParseSchema("struct<int1:int>")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w, err := NewWriter(f, SetSchema(schema))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	inputRowCount := 0
+	var intSum int
+
+	for i := 0; i < 100; i++ {
+		if i%6 == 0 {
+			err = w.Write(nil)
+		} else {
+			err = w.Write(i)
+			intSum += i
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		inputRowCount++
+	}
+
+	err = w.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Read the writer output
+	r, err := Open(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var compareIntSum int
+	c := r.Select("int1")
+	row := 0
+
+	for c.Stripes() {
+		for c.Next() {
+			switch v := c.Row()[0].(type) {
+			case int64:
+				if int(v) != row {
+					t.Errorf("Row %d should have value %d, got %d", row, row, v)
+				}
+				compareIntSum += int(v)
+			case nil:
+				if row%6 != 0 {
+					t.Errorf("Row %d should have been nil", row)
+				}
+			default:
+				t.Errorf("row %d - got %T %v", row, v, v)
+			}
+			row++
+		}
+	}
+
+	if err := c.Err(); err != nil && err != io.EOF {
+		t.Fatal(err)
+	}
+
+	if intSum != compareIntSum {
+		t.Errorf("Test failed, expected %v sum got %v", intSum, compareIntSum)
+	}
+
+	if row != inputRowCount {
+		t.Errorf("Test failed, expected %v rows got %v", inputRowCount, row)
+	}
+}
+
 func TestWriterWithCompressionSingleColumn(t *testing.T) {
 	f, err := ioutil.TempFile("", "testorc")
 	if err != nil {
