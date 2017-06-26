@@ -25,7 +25,7 @@ func TestCompressionHeader(t *testing.T) {
 		expected   []byte
 		isError    bool
 	}{
-		{265000, false, []byte{}, true},
+		{9000000, false, []byte{}, true},
 		{100000, false, []byte{0x40, 0x0d, 0x03}, false},
 		{5, true, []byte{0x0b, 0x00, 0x00}, false},
 	}

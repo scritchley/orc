@@ -300,9 +300,8 @@ func (c *CompressionSnappyEncoder) Flush() error {
 }
 
 func compressionHeader(chunkLength int, isOriginal bool) ([]byte, error) {
-	//TODO: Check if this is the right constant
-	if chunkLength > 256*1024 {
-		return []byte{}, fmt.Errorf("Maximum chunk length is 256KB")
+	if chunkLength > (1 << 23) {
+		return []byte{}, fmt.Errorf("Maximum chunk length is %d bytes, got %d bytes", 1<<23, chunkLength)
 	}
 
 	i := make([]byte, 4)
