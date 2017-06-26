@@ -72,6 +72,9 @@ func (b *BaseTreeWriter) positions() []uint64 {
 		switch b.codec.(type) {
 		case CompressionNone:
 			positions = append(positions, recorder.Positions()...)
+		default:
+			//TODO: Check if this is correct
+			positions = append(positions, recorder.Positions()...)
 		}
 	}
 	if !b.hasNull {
