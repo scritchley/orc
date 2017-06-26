@@ -37,10 +37,10 @@ func TestCompressionHeader(t *testing.T) {
 			continue
 		}
 		if err == nil && v.isError {
-			t.Error("On input: Length %d and isOriginal %b -> Expected an error, but got none.", v.chunkSize, v.isOriginal)
+			t.Errorf("On input: Length %d and isOriginal %t -> Expected an error, but got none.", v.chunkSize, v.isOriginal)
 		}
 		if bytes.Compare(header, v.expected) != 0 {
-			t.Errorf("On input: Length %d and isOriginal %b -> Expected header %x got %x", v.chunkSize, v.isOriginal, v.expected, header)
+			t.Errorf("On input: Length %d and isOriginal %t -> Expected header %x got %x", v.chunkSize, v.isOriginal, v.expected, header)
 		}
 	}
 }

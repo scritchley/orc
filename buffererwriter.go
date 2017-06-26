@@ -25,7 +25,7 @@ func NewBufferedWriter(codec CompressionCodec) *BufferedWriter {
 	case CompressionNone:
 		chunkSize = 1
 	case CompressionZlib:
-		chunkSize = 256 * 1024
+		chunkSize = int(DefaultCompressionChunkSize)
 	}
 	return &BufferedWriter{
 		codec:              codec,
