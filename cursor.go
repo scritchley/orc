@@ -9,12 +9,15 @@ import (
 // rows within the ORC file.
 type Cursor struct {
 	*Reader
-	streams  streamMap
-	columns  []*TypeDescription
-	included []int
-	readers  []TreeReader
-	nextVal  []interface{}
-	err      error
+	streams         streamMap
+	columns         []*TypeDescription
+	included        []int
+	readers         []TreeReader
+	nextVal         []interface{}
+	err             error
+	currentStripe   uint64
+	rowsInStripe    int
+	currentInStripe uint64
 }
 
 // Select determines the columns that will be read from the ORC file.
@@ -67,9 +70,26 @@ func (c *Cursor) prepareNextStripe() error {
 
 // Next returns true if another set of records are available.
 func (c *Cursor) Next() bool {
+	stripeMetadata := c.footer.Stripes
+	if len(stripeMetadata) < int(c.currentStripe)-1 {
+		// No metadata available for the stripe
+		return false
+	}
+
+	if c.currentStripe == 0 {
+		// c.Stripes() was not called before!
+		return false
+	}
+
+	rowCountInStripe := stripeMetadata[c.currentStripe-1].GetNumberOfRows()
+	if c.currentInStripe >= rowCountInStripe {
+		return false
+	}
+
 	// If readers have values available return true.
 	if c.next() {
 		c.row()
+		c.currentInStripe++
 		return true
 	}
 	return false
@@ -142,5 +162,7 @@ func (c *Cursor) Stripes() bool {
 		c.err = err
 		return false
 	}
+	c.currentStripe++
+	c.currentInStripe = 0
 	return true
 }

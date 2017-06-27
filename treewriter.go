@@ -104,15 +104,19 @@ func (b *BaseTreeWriter) Write(i interface{}) error {
 		return nil
 	}
 	if i == nil {
-		// The stream has nulls, therefore, set hasNull to
-		// true and write the prior values to the stream.
+		// The stream has nulls, therefore, set hasNull to true
 		b.hasNull = true
-		for j := uint64(1); j < b.numValues; j++ {
-			err := b.present.WriteBool(true)
-			if err != nil {
-				return err
-			}
-		}
+
+		// FIXME: It's not according to the spec as it's should be optional
+		// FIXME: For some reason it doesn't work so until we figure out why
+		// FIXME: In this case explicit and redundant is better than buggy
+		// for j := uint64(0); j < b.numValues-1; j++ {
+		// 	err := b.present.WriteBool(true)
+		// 	if err != nil {
+		// 		return err
+		// 	}
+		// }
+
 		// If interface value is nil, then write false to isPresent stream.
 		return b.present.WriteBool(false)
 	}
