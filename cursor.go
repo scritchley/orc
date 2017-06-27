@@ -81,14 +81,14 @@ func (c *Cursor) next() bool {
 	if len(c.readers) == 0 {
 		return false
 	}
-	// Check all readers have values available. Assumes all readers
-	// will always have the same number of values per stripe.
+	// Check if any of the readers has values available.
+	var hasNext bool
 	for _, reader := range c.readers {
-		if !reader.Next() {
-			return false
+		if reader.Next() {
+			hasNext = true
 		}
 	}
-	return true
+	return hasNext
 }
 
 // row preallocates the next row of values and stores in nextVal.
