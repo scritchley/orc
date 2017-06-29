@@ -127,7 +127,7 @@ func (w *Writer) Write(values ...interface{}) error {
 		if err := w.flushWriters(); err != nil {
 			return err
 		}
-		if w.streams.size() >= w.stripeTargetSize {
+		if w.treeWriters.size() >= w.stripeTargetSize {
 			return w.writeStripe()
 		}
 	}
