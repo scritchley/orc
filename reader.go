@@ -28,14 +28,15 @@ type SizedReaderAt interface {
 }
 
 type Reader struct {
-	r                   SizedReaderAt
-	postScript          *proto.PostScript
-	footer              *proto.Footer
-	metadata            *proto.Metadata
-	currentStripeOffset int
-	stripesLength       int
-	columns             map[int]*proto.ColumnEncoding
-	schema              *TypeDescription
+	r                        SizedReaderAt
+	postScript               *proto.PostScript
+	footer                   *proto.Footer
+	metadata                 *proto.Metadata
+	currentStripeOffset      int
+	currentStripeInformation *proto.StripeInformation
+	stripesLength            int
+	columns                  map[int]*proto.ColumnEncoding
+	schema                   *TypeDescription
 }
 
 func NewReader(r SizedReaderAt) (*Reader, error) {
@@ -178,14 +179,13 @@ func (r *Reader) getStreams(included ...int) (streamMap, error) {
 		return nil, io.EOF
 	}
 
-	stripe := stripes[r.currentStripeOffset]
+	r.currentStripeInformation = stripes[r.currentStripeOffset]
 	// Increment the currentStripeOffset so that the next call returns the next stripe.
 	r.currentStripeOffset++
-
 	// Unmarshal the stripe footer
-	stripeOffset := int64(stripe.GetOffset())
-	stripeFooterOffset := stripeOffset + int64(stripe.GetIndexLength()+stripe.GetDataLength())
-	stripeFooterLength := int64(stripe.GetFooterLength())
+	stripeOffset := int64(r.currentStripeInformation.GetOffset())
+	stripeFooterOffset := stripeOffset + int64(r.currentStripeInformation.GetIndexLength()+r.currentStripeInformation.GetDataLength())
+	stripeFooterLength := int64(r.currentStripeInformation.GetFooterLength())
 	stripeFooterReader := io.NewSectionReader(r.r, stripeFooterOffset, stripeFooterLength)
 	stripeFooterBytes := make([]byte, stripeFooterLength, stripeFooterLength)
 
@@ -416,6 +416,10 @@ func (r *Reader) getStripes() ([]*proto.StripeInformation, error) {
 		return r.footer.GetStripes(), nil
 	}
 	return nil, errNoFooter
+}
+
+func (r *Reader) stripeRowCount() int {
+	return int(r.currentStripeInformation.GetNumberOfRows())
 }
 
 func (r *Reader) Close() error {
