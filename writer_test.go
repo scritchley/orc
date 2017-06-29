@@ -368,3 +368,70 @@ func TestWriterWithCompressionRecompress(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestWriterWithNils(t *testing.T) {
+	f, err := ioutil.TempFile("", "testorc")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	filename := f.Name()
+	defer os.Remove(filename)
+	defer f.Close()
+
+	schema, err := ParseSchema("struct<int1:int>")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w, err := NewWriter(f, SetSchema(schema))
+	if err != nil {
+		t.Fatal(err)
+	}
+	numValues := 100
+	values := make([]interface{}, numValues)
+
+	for i := 0; i < numValues; i++ {
+		if i%5 == 0 {
+			values[i] = nil
+		} else {
+			values[i] = int64(i)
+		}
+		err := w.Write(values[i])
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	err = w.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Read the writer output
+	r, err := Open(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c := r.Select("int1")
+
+	var row int
+	for c.Stripes() {
+		for c.Next() {
+			val := c.Row()[0]
+			if !reflect.DeepEqual(values[row], val) {
+				t.Errorf("Test failed, expected %v, got %v", values[row], val)
+			}
+			row++
+		}
+	}
+
+	if err := c.Err(); err != nil && err != io.EOF {
+		t.Fatal(err)
+	}
+
+	if row != numValues {
+		t.Errorf("Test failed, expected %v, got %v", numValues, row)
+	}
+}
