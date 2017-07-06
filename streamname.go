@@ -81,6 +81,16 @@ func (w writerMap) forEach(fn func(i int, t TreeWriter) error) error {
 	return nil
 }
 
+func (w writerMap) size() int64 {
+	var size int
+	for _, treeWriter := range w {
+		for _, stream := range treeWriter.Streams() {
+			size += stream.buffer.Len()
+		}
+	}
+	return int64(size)
+}
+
 func (w writerMap) add(id int, t TreeWriter) {
 	w[id] = t
 }

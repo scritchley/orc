@@ -89,16 +89,18 @@ func (b *BaseTreeWriter) RecordPositions() {
 		Statistics: b.currentStatistics.Statistics(),
 	})
 	b.currentStatistics = NewColumnStatistics(b.category)
-	b.numValues = 0
 }
 
 // Write checks whether i is nil and writes an appropriate true or false value to
 // the underlying isPresent stream.
 func (b *BaseTreeWriter) Write(i interface{}) error {
 	// Add the value to the statistics
-	b.numValues++
 	b.statistics.Add(i)
 	b.currentStatistics.Add(i)
+	// If no nulls have been received yet, increment the numValues count.
+	if !b.hasNull {
+		b.numValues++
+	}
 	// isPresent is optional, therefore, support nil BooleanWriter
 	if b.present == nil {
 		return nil
@@ -113,6 +115,7 @@ func (b *BaseTreeWriter) Write(i interface{}) error {
 				return err
 			}
 		}
+		b.numValues = 0
 		// If interface value is nil, then write false to isPresent stream.
 		return b.present.WriteBool(false)
 	}
@@ -564,14 +567,14 @@ func (s *StringTreeWriter) WriteString(value string) error {
 // Write writes the provided value to the underlying writers. It returns an
 // error if the value is not a string type or if an error occurs during writing.
 func (s *StringTreeWriter) Write(value interface{}) error {
+	if value == nil {
+		return s.BaseTreeWriter.Write(value)
+	}
 	if str, ok := value.(string); ok {
 		if err := s.BaseTreeWriter.Write(value); err != nil {
 			return err
 		}
 		return s.WriteString(str)
-	}
-	if value == nil {
-		return s.BaseTreeWriter.Write(value)
 	}
 	return fmt.Errorf("expected string value, received: %T", value)
 }
@@ -798,12 +801,12 @@ func NewMapTreeWriter(category Category, codec CompressionCodec, keyWriter, valu
 	base.AddPositionRecorder(data)
 	// TODO: Inherit column encoding kind from orc.Writer ORC file version.
 	columnEncoding := proto.ColumnEncoding_DIRECT_V2
-	iwriter, err := createIntegerWriter(columnEncoding, data.buffer, true)
+	iwriter, err := createIntegerWriter(columnEncoding, data.buffer, false)
 	if err != nil {
 		return nil, err
 	}
 	l := &MapTreeWriter{
-		BaseTreeWriter: NewBaseTreeWriter(category, codec),
+		BaseTreeWriter: base,
 		lengths:        iwriter,
 		keys:           keyWriter,
 		values:         valueWriter,
@@ -813,16 +816,20 @@ func NewMapTreeWriter(category Category, codec CompressionCodec, keyWriter, valu
 }
 
 func (m *MapTreeWriter) Write(value interface{}) error {
-	if err := m.BaseTreeWriter.Write(value); err != nil {
-		return err
-	}
 	if value == nil {
-		return nil
+		return m.BaseTreeWriter.Write(nil)
 	}
 	switch reflect.TypeOf(value).Kind() {
 	case reflect.Map:
 		mm := reflect.ValueOf(value)
-		err := m.lengths.WriteInt(int64(mm.Len()))
+		l := mm.Len()
+		if l == 0 {
+			return m.BaseTreeWriter.Write(nil)
+		}
+		if err := m.BaseTreeWriter.Write(value); err != nil {
+			return err
+		}
+		err := m.lengths.WriteInt(int64(l))
 		if err != nil {
 			return err
 		}
@@ -831,7 +838,7 @@ func (m *MapTreeWriter) Write(value interface{}) error {
 			if err != nil {
 				return err
 			}
-			err = m.values.Write(mm.MapIndex(k))
+			err = m.values.Write(mm.MapIndex(k).Interface())
 			if err != nil {
 				return err
 			}

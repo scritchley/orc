@@ -9,12 +9,13 @@ import (
 // rows within the ORC file.
 type Cursor struct {
 	*Reader
-	streams  streamMap
-	columns  []*TypeDescription
-	included []int
-	readers  []TreeReader
-	nextVal  []interface{}
-	err      error
+	streams    streamMap
+	columns    []*TypeDescription
+	included   []int
+	readers    []TreeReader
+	nextVal    []interface{}
+	currentRow int
+	err        error
 }
 
 // Select determines the columns that will be read from the ORC file.
@@ -81,6 +82,9 @@ func (c *Cursor) next() bool {
 	if len(c.readers) == 0 {
 		return false
 	}
+	if c.currentRow >= int(c.stripeRowCount()) {
+		return false
+	}
 	// Check if any of the readers has values available.
 	var hasNext bool
 	for _, reader := range c.readers {
@@ -88,6 +92,7 @@ func (c *Cursor) next() bool {
 			hasNext = true
 		}
 	}
+	c.currentRow++
 	return hasNext
 }
 
