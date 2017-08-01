@@ -147,5 +147,6 @@ func (c *Cursor) Stripes() bool {
 		c.err = err
 		return false
 	}
+	c.currentRow = 0
 	return true
 }
