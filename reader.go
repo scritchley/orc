@@ -187,20 +187,15 @@ func (r *Reader) getStreams(included ...int) (streamMap, error) {
 	stripeFooterOffset := stripeOffset + int64(r.currentStripeInformation.GetIndexLength()+r.currentStripeInformation.GetDataLength())
 	stripeFooterLength := int64(r.currentStripeInformation.GetFooterLength())
 	stripeFooterReader := io.NewSectionReader(r.r, stripeFooterOffset, stripeFooterLength)
-	stripeFooterBytes := make([]byte, stripeFooterLength, stripeFooterLength)
 
-	_, err = io.ReadFull(stripeFooterReader, stripeFooterBytes)
-	if err != nil {
-		return nil, err
-	}
 	codec, err := r.getCodec()
 	if err != nil {
 		return nil, err
 	}
 
 	// Decode the footer into a new byte slice.
-	stripeFooterDecoder := codec.Decoder(bytes.NewReader(stripeFooterBytes))
-	decodedStripeFooterBytes, err := ioutil.ReadAll(stripeFooterDecoder)
+	stripeFooterDecoded := codec.Decoder(stripeFooterReader)
+	decodedStripeFooterBytes, err := ioutil.ReadAll(stripeFooterDecoded)
 	if err != nil {
 		return nil, err
 	}
