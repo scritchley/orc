@@ -10,35 +10,41 @@ import (
 )
 
 var (
-	magic                              = "ORC"
-	DefaultStripeTargetSize     int64  = 200 * 1024 * 1024
+	magic = "ORC"
+	// DefaultStripeTargetSize is the size in bytes over which a stripe should be written to the underlying file.
+	DefaultStripeTargetSize int64 = 200 * 1024 * 1024
+	// DefaultStripeTargetRowCount is the number of rows over which a stripe should be written to the underlying file.
+	DefaultStripeTargetRowCount int64 = 1024 * 1024
+	// DefaultCompressionChunkSize is the default size of compression chunks within each stream.
 	DefaultCompressionChunkSize uint64 = 256 * 1024
-	DefaultRowIndexStride       uint32 = 10000
+	// DefaultRowIndexStride is the default number of rows between indexes
+	DefaultRowIndexStride uint32 = 10000
 )
 
 type Writer struct {
-	schema            *TypeDescription
-	streams           streamWriterMap
-	w                 io.Writer
-	treeWriter        TreeWriter
-	treeWriters       writerMap
-	stripeRows        uint64
-	stripeOffset      uint64
-	stripeLength      uint64
-	stripeIndexOffset uint64
-	stripeTargetSize  int64
-	footer            *proto.Footer
-	footerLength      uint64
-	postScript        *proto.PostScript
-	postScriptLength  uint8
-	metadata          *proto.Metadata
-	metadataLength    uint64
-	totalRows         uint64
-	statistics        statisticsMap
-	indexes           map[int]*proto.RowIndex
-	indexOffset       uint64
-	chunkOffset       uint64
-	compressionCodec  CompressionCodec
+	schema               *TypeDescription
+	streams              streamWriterMap
+	w                    io.Writer
+	treeWriter           TreeWriter
+	treeWriters          writerMap
+	stripeRows           uint64
+	stripeOffset         uint64
+	stripeLength         uint64
+	stripeIndexOffset    uint64
+	stripeTargetSize     int64
+	stripeTargetRowCount int64
+	footer               *proto.Footer
+	footerLength         uint64
+	postScript           *proto.PostScript
+	postScriptLength     uint8
+	metadata             *proto.Metadata
+	metadataLength       uint64
+	totalRows            uint64
+	statistics           statisticsMap
+	indexes              map[int]*proto.RowIndex
+	indexOffset          uint64
+	chunkOffset          uint64
+	compressionCodec     CompressionCodec
 }
 
 func ptrInt64(i int64) *int64 {
@@ -74,17 +80,35 @@ func SetCompression(codec CompressionCodec) WriterConfigFunc {
 	}
 }
 
+func SetStripeTargetSize(stripeTargetSize int64) WriterConfigFunc {
+	return func(w *Writer) error {
+		w.stripeTargetSize = stripeTargetSize
+		return nil
+	}
+}
+
+func AddUserMetadata(name string, value []byte) WriterConfigFunc {
+	return func(w *Writer) error {
+		w.footer.Metadata = append(w.footer.Metadata, &proto.UserMetadataItem{
+			Name:  &name,
+			Value: value,
+		})
+		return nil
+	}
+}
+
 // NewWriter returns a new ORC file writer that writes to the provided io.Writer.
 func NewWriter(w io.Writer, fns ...WriterConfigFunc) (*Writer, error) {
 	// Construct the initial writer config, including the initial footer,
 	// postscript and metadata sections.
 	writer := &Writer{
-		w:                w,
-		stripeOffset:     uint64(len(magic)),
-		stripeTargetSize: DefaultStripeTargetSize,
-		streams:          make(streamWriterMap),
-		statistics:       make(statisticsMap),
-		indexes:          make(map[int]*proto.RowIndex),
+		w:                    w,
+		stripeOffset:         uint64(len(magic)),
+		stripeTargetSize:     DefaultStripeTargetSize,
+		stripeTargetRowCount: DefaultStripeTargetRowCount,
+		streams:              make(streamWriterMap),
+		statistics:           make(statisticsMap),
+		indexes:              make(map[int]*proto.RowIndex),
 		footer: &proto.Footer{
 			RowIndexStride: ptrUint32(DefaultRowIndexStride),
 			Statistics:     []*proto.ColumnStatistics{},
@@ -128,6 +152,9 @@ func (w *Writer) Write(values ...interface{}) error {
 			return err
 		}
 		if w.treeWriters.size() >= w.stripeTargetSize {
+			return w.writeStripe()
+		}
+		if int64(w.stripeRows) >= w.stripeTargetRowCount {
 			return w.writeStripe()
 		}
 	}
@@ -377,6 +404,7 @@ func (w *Writer) writeStripe() error {
 		return err
 	}
 
+	preFooterLength := buf.Len()
 	encoder := w.compressionCodec.Encoder(buf)
 	nn, err := encoder.Write(byt)
 	if err != nil {
@@ -389,14 +417,13 @@ func (w *Writer) writeStripe() error {
 	if err != nil {
 		return err
 	}
-
-	l := buf.Len()
+	postFooterLength := buf.Len()
 	n, err := io.Copy(w.w, buf)
 	if err != nil {
 		return err
 	}
-	if int(n) != l {
-		return fmt.Errorf("Expected to write %d bytes, wrote %d", l, n)
+	if int(n) != postFooterLength {
+		return fmt.Errorf("Expected to write %d bytes, wrote %d", postFooterLength, n)
 	}
 	buf.Reset()
 
@@ -406,7 +433,7 @@ func (w *Writer) writeStripe() error {
 	w.stripeIndexOffset = 0
 
 	// Append stripe information to the footer
-	footerLength := uint64(l)
+	footerLength := uint64(postFooterLength - preFooterLength)
 	offset := w.stripeOffset
 	w.footer.Stripes = append(w.footer.Stripes, &proto.StripeInformation{
 		Offset:       &offset,
@@ -416,8 +443,8 @@ func (w *Writer) writeStripe() error {
 		NumberOfRows: &stripeRows,
 	})
 
-	// Update the stripe offset for the next stripe
-	w.stripeOffset += stripeDataLength + footerLength
+	// Update the stripe offset for the next stripe by combining the index, data and footer lengths.
+	w.stripeOffset += stripeIndexLength + stripeDataLength + footerLength
 
 	// Add stripe statistics to metadata
 	w.metadata.StripeStats = append(w.metadata.StripeStats, &proto.StripeStatistics{
