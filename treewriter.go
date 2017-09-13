@@ -1013,3 +1013,90 @@ func (w *TimestampTreeWriter) Encoding() *proto.ColumnEncoding {
 		Kind: proto.ColumnEncoding_DIRECT_V2.Enum(),
 	}
 }
+
+// DateTreeWriter is a TreeWriter implementation that writes an Date type column.
+type DateTreeWriter struct {
+	BaseTreeWriter
+	data          *BufferedWriter
+	dataIntWriter IntegerWriter
+	encoding      *proto.ColumnEncoding_Kind
+}
+
+// NewDateTreeWriter returns a new DateTreeWriter.
+func NewDateTreeWriter(category Category, codec CompressionCodec) (*DateTreeWriter, error) {
+	base := NewBaseTreeWriter(category, codec)
+	data := base.AddStream(proto.Stream_DATA.Enum())
+	base.AddPositionRecorder(data)
+	dataIntWriter, err := createIntegerWriter(proto.ColumnEncoding_DIRECT_V2, data.buffer, true)
+	if err != nil {
+		return nil, err
+	}
+	return &DateTreeWriter{
+		BaseTreeWriter: base,
+		data:           data.buffer,
+		dataIntWriter:  dataIntWriter,
+		encoding:       proto.ColumnEncoding_DIRECT_V2.Enum(),
+	}, nil
+}
+
+// Encoding returns the column encoding used for the DateTreeWriter.
+func (w *DateTreeWriter) Encoding() *proto.ColumnEncoding {
+	return &proto.ColumnEncoding{
+		Kind: w.encoding,
+	}
+}
+
+// WriteDate writes an Date value returning an error if one occurs.
+func (w *DateTreeWriter) WriteDate(date time.Time) error {
+	daySinceEpoch := date.Truncate(24*time.Hour).Unix() / 86400
+	if err := w.dataIntWriter.WriteInt(daySinceEpoch); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Write writes a value returning an error if one occurs. It accepts a time.Time
+// or a nil value for writing nulls to the stream. Any other types will
+// return an error.
+func (w *DateTreeWriter) Write(value interface{}) error {
+	switch t := value.(type) {
+	case nil:
+		if err := w.BaseTreeWriter.Write(value); err != nil {
+			return err
+		}
+		return nil
+	case time.Time:
+		if err := w.BaseTreeWriter.Write(t); err != nil {
+			return err
+		}
+		return w.WriteDate(t)
+	default:
+		return fmt.Errorf("cannot write %T to Date column type", t)
+	}
+}
+
+// Close closes the underlying writers returning an error if one occurs.
+func (w *DateTreeWriter) Close() error {
+	if err := w.Flush(); err != nil {
+		return err
+	}
+
+	if err := w.dataIntWriter.Close(); err != nil {
+		return err
+	}
+
+	if err := w.data.Close(); err != nil {
+		return err
+	}
+
+	return w.BaseTreeWriter.Close()
+}
+
+// Flush flushes the underlying writers returning an error if one occurs.
+func (w *DateTreeWriter) Flush() error {
+	if err := w.dataIntWriter.Flush(); err != nil {
+		return err
+	}
+
+	return w.BaseTreeWriter.Flush()
+}
