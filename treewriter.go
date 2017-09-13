@@ -374,6 +374,7 @@ func (s *StructTreeWriter) Encoding() *proto.ColumnEncoding {
 }
 
 func (s *StructTreeWriter) RecordPositions() {
+	s.BaseTreeWriter.RecordPositions()
 	for _, child := range s.children {
 		child.RecordPositions()
 	}
