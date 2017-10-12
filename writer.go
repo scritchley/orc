@@ -114,13 +114,13 @@ func NewWriter(w io.Writer, fns ...WriterConfigFunc) (*Writer, error) {
 		statistics:           make(statisticsMap),
 		indexes:              make(map[int]*proto.RowIndex),
 		footer: &proto.Footer{
-			Writer:         &WriterImplementation,
+			Writer:         ptrUint32(WriterImplementation),
 			RowIndexStride: ptrUint32(DefaultRowIndexStride),
 			Statistics:     []*proto.ColumnStatistics{},
 		},
 		postScript: &proto.PostScript{
 			Magic:                ptrStr(magic),
-			WriterVersion:        &WriterVersion,
+			WriterVersion:        ptrUint32(WriterVersion),
 			CompressionBlockSize: ptrUint64(DefaultCompressionChunkSize),
 			Compression:          proto.CompressionKind_NONE.Enum(),
 			Version:              []uint32{Version0_12.major, Version0_12.minor},
