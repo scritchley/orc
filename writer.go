@@ -11,6 +11,10 @@ import (
 
 var (
 	magic = "ORC"
+	// WriterImplementation identifies the writer implementation
+	WriterImplementation = uint32(3)
+	// WriterVersion identifies the writer version being used.
+	WriterVersion = uint32(6)
 	// DefaultStripeTargetSize is the size in bytes over which a stripe should be written to the underlying file.
 	DefaultStripeTargetSize int64 = 200 * 1024 * 1024
 	// DefaultStripeTargetRowCount is the number of rows over which a stripe should be written to the underlying file.
@@ -110,11 +114,13 @@ func NewWriter(w io.Writer, fns ...WriterConfigFunc) (*Writer, error) {
 		statistics:           make(statisticsMap),
 		indexes:              make(map[int]*proto.RowIndex),
 		footer: &proto.Footer{
+			Writer:         &WriterImplementation,
 			RowIndexStride: ptrUint32(DefaultRowIndexStride),
 			Statistics:     []*proto.ColumnStatistics{},
 		},
 		postScript: &proto.PostScript{
 			Magic:                ptrStr(magic),
+			WriterVersion:        &WriterVersion,
 			CompressionBlockSize: ptrUint64(DefaultCompressionChunkSize),
 			Compression:          proto.CompressionKind_NONE.Enum(),
 			Version:              []uint32{Version0_12.major, Version0_12.minor},
