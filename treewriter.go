@@ -1114,6 +1114,7 @@ func (s *UnionTreeWriter) RecordPositions() {
 	for _, child := range s.children {
 		child.RecordPositions()
 	}
+}
 
 // DateTreeWriter is a TreeWriter implementation that writes an Date type column.
 type DateTreeWriter struct {
