@@ -5,4 +5,4 @@ go:
   - 1.8
   - master
   
-go_import_path: code.simon-critchley.co.uk/orc
+go_import_path: github.com/scritchley/orc
