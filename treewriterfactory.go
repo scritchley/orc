@@ -83,6 +83,17 @@ func createTreeWriter(codec CompressionCodec, schema *TypeDescription, writers w
 		if err != nil {
 			return nil, err
 		}
+	case CategoryUnion:
+		// Create a TreeWriter for each child of the unionvalue column.
+		var children []TreeWriter
+		for _, child := range schema.children {
+			childWriter, err := createTreeWriter(codec, child, writers)
+			if err != nil {
+				return nil, err
+			}
+			children = append(children, childWriter)
+		}
+		treeWriter, err = NewUnionTreeWriter(category, codec, children)
 	case CategoryDate:
 		treeWriter, err = NewDateTreeWriter(category, codec)
 		if err != nil {

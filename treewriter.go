@@ -1015,6 +1015,107 @@ func (w *TimestampTreeWriter) Encoding() *proto.ColumnEncoding {
 	}
 }
 
+// UnionTreeWriter is a TreeWriter implementation that can write a unionvalue column type.
+type UnionTreeWriter struct {
+	BaseTreeWriter
+	data       *BufferedWriter
+	dataWriter *RunLengthByteWriter
+	children   []TreeWriter
+}
+
+// NewUnionTreeWriter returns a UnionTreeWriter using the provided io.Writer and children
+// TreeWriters. It additionally returns an error if one occurs.
+func NewUnionTreeWriter(category Category, codec CompressionCodec, children []TreeWriter) (*UnionTreeWriter, error) {
+	base := NewBaseTreeWriter(category, codec)
+	data := base.AddStream(proto.Stream_DATA.Enum())
+	base.AddPositionRecorder(data)
+	return &UnionTreeWriter{
+		BaseTreeWriter: base,
+		data:           data.buffer,
+		dataWriter:     NewRunLengthByteWriter(data.buffer),
+		children:       children,
+	}, nil
+}
+
+// Write writes a value to the underlying child TreeWriters. It returns
+// an error if one occurs.
+func (s *UnionTreeWriter) WriteUnion(value UnionValue) error {
+	// First write the value to the present column.
+	if err := s.BaseTreeWriter.Write(value); err != nil {
+		return err
+	}
+	if value.Tag >= len(s.children) || value.Tag < 0 {
+		return fmt.Errorf("invalid tag: %v", value.Tag)
+	}
+	if err := s.dataWriter.WriteByte(uint8(value.Tag)); err != nil {
+		return err
+	}
+	return s.children[value.Tag].Write(value.Value)
+}
+
+func (s *UnionTreeWriter) Write(value interface{}) error {
+	if val, ok := value.(UnionValue); ok {
+		return s.WriteUnion(val)
+	}
+	return fmt.Errorf("cannot write %T to unionvalue column type", value)
+}
+
+// Close closes the UnionTreeWriter and its child TreeWriters returning an
+// error if one occurs.
+func (s *UnionTreeWriter) Close() error {
+	if err := s.BaseTreeWriter.Close(); err != nil {
+		return err
+	}
+	if err := s.dataWriter.Close(); err != nil {
+		return err
+	}
+	if err := s.data.Close(); err != nil {
+		return err
+	}
+	for i := range s.children {
+		err := s.children[i].Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Flush flushes the UnionTreeWriter and its child TreeWriters returning an
+// error if one occurs.
+func (s *UnionTreeWriter) Flush() error {
+	if err := s.BaseTreeWriter.Flush(); err != nil {
+		return err
+	}
+	if err := s.dataWriter.Flush(); err != nil {
+		return err
+	}
+	if err := s.data.Flush(); err != nil {
+		return err
+	}
+	for i := range s.children {
+		err := s.children[i].Flush()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Encoding returns the column encoding for the UnionTreeWriter.
+func (s *UnionTreeWriter) Encoding() *proto.ColumnEncoding {
+	return &proto.ColumnEncoding{
+		Kind: proto.ColumnEncoding_DIRECT_V2.Enum(),
+	}
+}
+
+func (s *UnionTreeWriter) RecordPositions() {
+	s.BaseTreeWriter.RecordPositions()
+	for _, child := range s.children {
+		child.RecordPositions()
+	}
+}
+
 // DateTreeWriter is a TreeWriter implementation that writes an Date type column.
 type DateTreeWriter struct {
 	BaseTreeWriter
