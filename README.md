@@ -40,7 +40,7 @@ This project is still a work in progress.
     c := r.Select("_col0", "_col1", "_col2")
 
     // Iterate over each stripe in the file.
-    for c.Stripes()
+    for c.Stripes() {
         
         // Iterate over each row in the stripe.
         for c.Next() {
