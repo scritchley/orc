@@ -299,16 +299,16 @@ func (r *Reader) createSchema(types []*proto.Type, rootColumn int) (*TypeDescrip
 		if err != nil {
 			return nil, err
 		}
-		precision := int(root.GetPrecision())
-		if precision != 0 {
-			err = td.withPrecision(precision)
+		scale := int(root.GetScale())
+		if scale != 0 {
+			err = td.withScale(scale)
 			if err != nil {
 				return nil, err
 			}
 		}
-		scale := int(root.GetScale())
-		if scale != 0 {
-			err = td.withScale(scale)
+		precision := int(root.GetPrecision())
+		if precision != 0 {
+			err = td.withPrecision(precision)
 			if err != nil {
 				return nil, err
 			}

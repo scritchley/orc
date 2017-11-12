@@ -3,6 +3,7 @@ package orc
 import (
 	"encoding/asn1"
 	"encoding/json"
+	"fmt"
 	"io"
 	"math"
 	"math/big"
@@ -10,13 +11,17 @@ import (
 
 // Decimal is a decimal type.
 type Decimal struct {
-	Abs *big.Int
+	Abs int64
 	Exp int64
+}
+
+func (d Decimal) String() string {
+	return fmt.Sprint(d.Float64())
 }
 
 // Float64 returns the float64 equivalent of the Decimal value.
 func (d Decimal) Float64() float64 {
-	return float64(d.Abs.Int64()) / (1 / math.Pow(10, -float64(d.Exp)))
+	return float64(d.Abs) / (1 / math.Pow(10, -float64(d.Exp)))
 }
 
 // Float32 returns the float32 equivalent of the Decimal value.

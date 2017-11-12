@@ -917,7 +917,7 @@ func (d *DecimalTreeReader) Next() bool {
 	if !d.secondary.Next() {
 		return false
 	}
-	i, err := decodeBase128Varint(d.data)
+	i, err := readSignedVInt(d.data)
 	if err != nil {
 		d.err = err
 		return false
