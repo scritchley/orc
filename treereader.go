@@ -917,15 +917,12 @@ func (d *DecimalTreeReader) Next() bool {
 	if !d.secondary.Next() {
 		return false
 	}
-	i, err := decodeBase128Varint(d.data)
+	mant, err := decodeBase128Varint(d.data)
 	if err != nil {
 		d.err = err
 		return false
 	}
-	d.nextVal = Decimal{
-		Abs: i,
-		Exp: d.secondary.Int(),
-	}
+	d.nextVal = NewDecimal(mant, d.secondary.Int())
 	return true
 }
 
