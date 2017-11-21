@@ -470,29 +470,41 @@ func (f *FloatTreeWriter) Write(value interface{}) error {
 }
 
 func (f *FloatTreeWriter) WriteDouble(value interface{}) error {
-	if val, ok := value.(float64); ok {
-		byt := make([]byte, f.bytesPerValue)
-		binary.LittleEndian.PutUint64(byt, math.Float64bits(val))
-		_, err := f.BufferedWriter.Write(byt)
-		if err != nil {
-			return err
-		}
-		return nil
+	var fval float64
+	switch t := value.(type) {
+	case float64:
+		fval = t
+	case Double:
+		fval = float64(t)
+	default:
+		return fmt.Errorf("expected float64 value, received: %T", value)
 	}
-	return fmt.Errorf("expected float64 value, received: %T", value)
+	byt := make([]byte, f.bytesPerValue)
+	binary.LittleEndian.PutUint64(byt, math.Float64bits(fval))
+	_, err := f.BufferedWriter.Write(byt)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (f *FloatTreeWriter) WriteFloat(value interface{}) error {
-	if val, ok := value.(float32); ok {
-		byt := make([]byte, f.bytesPerValue)
-		binary.LittleEndian.PutUint32(byt, math.Float32bits(val))
-		_, err := f.BufferedWriter.Write(byt)
-		if err != nil {
-			return err
-		}
-		return nil
+	var fval float32
+	switch t := value.(type) {
+	case float32:
+		fval = t
+	case Float:
+		fval = float32(t)
+	default:
+		return fmt.Errorf("expected float32 value, received: %T", value)
 	}
-	return fmt.Errorf("expected float32 value, received: %T", value)
+	byt := make([]byte, f.bytesPerValue)
+	binary.LittleEndian.PutUint32(byt, math.Float32bits(fval))
+	_, err := f.BufferedWriter.Write(byt)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (f *FloatTreeWriter) Close() error {

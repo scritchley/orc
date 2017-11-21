@@ -85,11 +85,12 @@ func (c *Cursor) next() bool {
 	if c.currentRow >= int(c.stripeRowCount()) {
 		return false
 	}
-	// Check if any of the readers has values available.
 	var hasNext bool
 	for _, reader := range c.readers {
 		if reader.Next() {
 			hasNext = true
+		} else if err := reader.Err(); err != nil && err != io.EOF {
+			return false
 		}
 	}
 	c.currentRow++
@@ -114,8 +115,8 @@ func (c *Cursor) Scan(dest ...interface{}) error {
 	if len(dest) != len(c.readers) {
 		return fmt.Errorf("expected destination slice of length %v got %v", len(c.readers), len(dest))
 	}
-	for i, reader := range c.readers {
-		dest[i] = reader.Value()
+	for i, v := range c.nextVal {
+		dest[i] = v
 	}
 	return nil
 }
@@ -131,7 +132,7 @@ func (c *Cursor) Err() error {
 	}
 	// Otherwise, return the first error returned by the readers.
 	for _, reader := range c.readers {
-		if err := reader.Err(); err != nil {
+		if err := reader.Err(); err != nil && err != io.EOF {
 			return err
 		}
 	}
