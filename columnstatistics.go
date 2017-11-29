@@ -71,25 +71,27 @@ type BaseStatistics struct {
 
 func NewBaseStatistics() BaseStatistics {
 	var hasNull bool
+	var numValues uint64
 	return BaseStatistics{
 		&proto.ColumnStatistics{
-			HasNull: &hasNull,
+			NumberOfValues: &numValues,
+			HasNull:        &hasNull,
 		},
 	}
 }
 
 func (b BaseStatistics) Add(value interface{}) {
 	if hasNull := value == nil; hasNull {
-		b.HasNull = &hasNull
+		*b.HasNull = hasNull
 	}
 	n := b.ColumnStatistics.GetNumberOfValues() + 1
-	b.ColumnStatistics.NumberOfValues = &n
+	*b.ColumnStatistics.NumberOfValues = n
 }
 
 func (b BaseStatistics) Merge(other ColumnStatistics) {
 	if bs, ok := other.(BaseStatistics); ok {
 		numValues := b.GetNumberOfValues() + bs.GetNumberOfValues()
-		b.NumberOfValues = &numValues
+		*b.NumberOfValues = numValues
 	}
 }
 
@@ -111,25 +113,28 @@ func (i *IntegerStatistics) Merge(other ColumnStatistics) {
 			i.IntStatistics.Minimum = is.IntStatistics.Minimum
 		}
 		sum := i.IntStatistics.GetSum() + is.IntStatistics.GetSum()
-		i.IntStatistics.Sum = &sum
+		*i.IntStatistics.Sum = sum
 		i.BaseStatistics.Merge(is.BaseStatistics)
 	}
 }
 
 func (i *IntegerStatistics) Add(value interface{}) {
 	if val, ok := value.(int64); ok {
-		if val > i.IntStatistics.GetMaximum() {
-			i.IntStatistics.Maximum = &val
+		if i.IntStatistics.Maximum == nil {
+			valCopy := val
+			i.IntStatistics.Maximum = &valCopy
+		} else if val > i.IntStatistics.GetMaximum() {
+			*i.IntStatistics.Maximum = val
 		}
 		if !i.minSet {
-			i.IntStatistics.Minimum = &val
+			valCopy := val
+			i.IntStatistics.Minimum = &valCopy
 			i.minSet = true
-		}
-		if val < i.IntStatistics.GetMinimum() {
-			i.IntStatistics.Minimum = &val
+		} else if val < i.IntStatistics.GetMinimum() {
+			*i.IntStatistics.Minimum = val
 		}
 		sum := i.IntStatistics.GetSum() + val
-		i.IntStatistics.Sum = &sum
+		*i.IntStatistics.Sum = sum
 	}
 	i.BaseStatistics.Add(value)
 }
@@ -144,7 +149,10 @@ func (i *IntegerStatistics) Reset() {
 
 func NewIntegerStatistics() *IntegerStatistics {
 	base := NewBaseStatistics()
-	base.IntStatistics = &proto.IntegerStatistics{}
+	var sumValue int64
+	base.IntStatistics = &proto.IntegerStatistics{
+		Sum: &sumValue,
+	}
 	return &IntegerStatistics{
 		BaseStatistics: base,
 	}
@@ -157,7 +165,10 @@ type StringStatistics struct {
 
 func NewStringStatistics() *StringStatistics {
 	base := NewBaseStatistics()
-	base.StringStatistics = &proto.StringStatistics{}
+	var sumValue int64
+	base.StringStatistics = &proto.StringStatistics{
+		Sum: &sumValue,
+	}
 	return &StringStatistics{
 		BaseStatistics: base,
 	}
@@ -172,25 +183,28 @@ func (s *StringStatistics) Merge(other ColumnStatistics) {
 			s.StringStatistics.Minimum = ss.StringStatistics.Minimum
 		}
 		sum := s.StringStatistics.GetSum() + ss.StringStatistics.GetSum()
-		s.StringStatistics.Sum = &sum
+		*s.StringStatistics.Sum = sum
 		s.BaseStatistics.Merge(ss.BaseStatistics)
 	}
 }
 
 func (s *StringStatistics) Add(value interface{}) {
 	if val, ok := value.(string); ok {
-		if val > s.StringStatistics.GetMaximum() {
-			s.StringStatistics.Maximum = &val
+		if s.StringStatistics.Maximum == nil {
+			valCopy := val
+			s.StringStatistics.Maximum = &valCopy
+		} else if val > s.StringStatistics.GetMaximum() {
+			*s.StringStatistics.Maximum = val
 		}
 		if !s.minSet {
-			s.StringStatistics.Minimum = &val
+			valCopy := val
+			s.StringStatistics.Minimum = &valCopy
 			s.minSet = true
-		}
-		if val < s.StringStatistics.GetMinimum() {
-			s.StringStatistics.Minimum = &val
+		} else if val < s.StringStatistics.GetMinimum() {
+			*s.StringStatistics.Minimum = val
 		}
 		sum := s.StringStatistics.GetSum() + int64(len(val))
-		s.StringStatistics.Sum = &sum
+		*s.StringStatistics.Sum = sum
 	}
 	s.BaseStatistics.Add(value)
 }
