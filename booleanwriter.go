@@ -20,7 +20,7 @@ func (b *BooleanWriter) WriteBool(t bool) error {
 	// If bitsInData is equal to 8 then write the byte
 	// to the underlying ByteStreamWriter.
 	if b.bitsInData >= 8 {
-		err := b.Flush()
+		err := b.flushBools()
 		if err != nil {
 			return err
 		}
@@ -33,7 +33,7 @@ func (b *BooleanWriter) WriteBool(t bool) error {
 	return nil
 }
 
-func (b *BooleanWriter) Flush() error {
+func (b *BooleanWriter) flushBools() error {
 	if b.bitsInData > 0 {
 		err := b.RunLengthByteWriter.WriteByte(b.data)
 		if err != nil {
@@ -42,9 +42,21 @@ func (b *BooleanWriter) Flush() error {
 		b.bitsInData = 0
 		b.data = 0
 	}
+	return nil
+}
+
+func (b *BooleanWriter) Flush() error {
+	err := b.flushBools()
+	if err != nil {
+		return err
+	}
 	return b.RunLengthByteWriter.Flush()
 }
 
 func (b *BooleanWriter) Close() error {
-	return b.Flush()
+	err := b.Flush()
+	if err != nil {
+		return err
+	}
+	return b.RunLengthByteWriter.Close()
 }
