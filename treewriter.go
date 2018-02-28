@@ -174,6 +174,9 @@ func (b *BaseTreeWriter) Streams() []Stream {
 }
 
 func (b *BaseTreeWriter) RowIndex() *proto.RowIndex {
+	if !b.category.isPrimitive {
+		return nil
+	}
 	return &proto.RowIndex{
 		Entry: b.indexEntries,
 	}
