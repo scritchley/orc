@@ -146,6 +146,10 @@ func NewWriter(w io.Writer, fns ...WriterConfigFunc) (*Writer, error) {
 	return writer, nil
 }
 
+func (w *Writer) Schema() *TypeDescription {
+	return w.schema
+}
+
 func (w *Writer) Write(values ...interface{}) error {
 	w.stripeRows++
 	w.totalRows++
@@ -329,8 +333,15 @@ func (w *Writer) writeStripe() error {
 	// Iterate through the TreeWriters and write their output
 	// to the underlying writer.
 	err := w.treeWriters.forEach(func(id int, t TreeWriter) error {
-		// First write the rowIndex for the column.
+
+		// Add to the running stripe statistics.
+		stripeStatistics.add(id, t.Statistics())
+
+		// Write rowIndex for the column.
 		rowIndex := t.RowIndex()
+		if rowIndex == nil {
+			return nil
+		}
 		byt, err := gproto.Marshal(rowIndex)
 		if err != nil {
 			return err
@@ -367,8 +378,6 @@ func (w *Writer) writeStripe() error {
 			Length: ptrUint64(uint64(l)),
 		}
 		streams = append(streams, streamInfo)
-		// Add to the running stripe statistics.
-		stripeStatistics.add(id, t.Statistics())
 		return nil
 	})
 	if err != nil {
