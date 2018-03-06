@@ -171,6 +171,11 @@ func (w *Writer) Write(values ...interface{}) error {
 	return nil
 }
 
+// Flush the current stripe to the underlying Writer
+func (w *Writer) Flush() error {
+	return w.writeStripe()
+}
+
 func (w *Writer) init() error {
 	if err := w.initOrc(); err != nil {
 		return err
