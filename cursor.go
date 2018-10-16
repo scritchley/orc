@@ -3,19 +3,25 @@ package orc
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
+
+	gproto "github.com/golang/protobuf/proto"
+
+	"github.com/scritchley/orc/proto"
 )
 
 // Cursor is used for iterating through the stripes and
 // rows within the ORC file.
 type Cursor struct {
 	*Reader
-	streams    streamMap
-	columns    []*TypeDescription
-	included   []int
-	readers    []TreeReader
-	nextVal    []interface{}
-	currentRow int
-	err        error
+	*Stripe
+	columns      []*TypeDescription
+	included     []int
+	readers      []TreeReader
+	nextVal      []interface{}
+	currentRow   int
+	err          error
+	stripeOffset int
 }
 
 // Select determines the columns that will be read from the ORC file.
@@ -43,7 +49,7 @@ func (c *Cursor) Select(fields ...string) *Cursor {
 func (c *Cursor) prepareStreamReaders() error {
 	var readers []TreeReader
 	for _, column := range c.columns {
-		reader, err := createTreeReader(column, c.streams, c.Reader)
+		reader, err := createTreeReader(column, c.Stripe)
 		if err != nil {
 			return err
 		}
@@ -59,10 +65,11 @@ func (c *Cursor) prepareNextStripe() error {
 	// and creating the required readers for each of the
 	// required columns.
 	var err error
-	c.streams, err = c.Reader.getStreams(c.included...)
+	c.Stripe, err = c.Reader.getStripe(c.stripeOffset, c.included...)
 	if err != nil {
 		return err
 	}
+	c.stripeOffset++ // Increment in order to fetch the next stripe.
 	return c.prepareStreamReaders()
 }
 
@@ -82,7 +89,7 @@ func (c *Cursor) next() bool {
 	if len(c.readers) == 0 {
 		return false
 	}
-	if c.currentRow >= int(c.stripeRowCount()) {
+	if c.currentRow >= int(c.Stripe.GetNumberOfRows()) {
 		return false
 	}
 	var hasNext bool
@@ -150,4 +157,26 @@ func (c *Cursor) Stripes() bool {
 	}
 	c.currentRow = 0
 	return true
+}
+
+// RowIndex returns the row index for the provided column from the current strip
+func (c *Cursor) RowIndex(column string) (*proto.RowIndex, error) {
+	col, err := c.Reader.schema.GetField(column)
+	if err != nil {
+		return nil, err
+	}
+	stream := c.Stripe.get(streamName{
+		columnID: col.getID(),
+		kind:     proto.Stream_ROW_INDEX,
+	})
+	var rowIndex proto.RowIndex
+	byt, err := ioutil.ReadAll(stream)
+	if err != nil {
+		return nil, err
+	}
+	err = gproto.Unmarshal(byt, &rowIndex)
+	if err != nil {
+		return nil, err
+	}
+	return &rowIndex, nil
 }
