@@ -1,6 +1,7 @@
 package orc
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/scritchley/orc/proto"
@@ -33,19 +34,61 @@ func TestCursor(t *testing.T) {
 	}
 
 	// There should be a data stream available for reading.
-	stream := c.streams.get(streamName{1, proto.Stream_DATA})
+	stream := c.Stripe.get(streamName{1, proto.Stream_DATA})
 	if stream == nil {
 		t.Errorf("Test failed, got nil stream")
 	}
 
 	// There should also be a row index.
-	stream = c.streams.get(streamName{1, proto.Stream_ROW_INDEX})
+	stream = c.Stripe.get(streamName{1, proto.Stream_ROW_INDEX})
 	if stream == nil {
 		t.Errorf("Test failed, got nil stream")
 	}
 
 	if err := c.Err(); err != nil {
 		t.Fatal(err)
+	}
+
+}
+
+func TestCursorResets(t *testing.T) {
+
+	r, err := Open("./examples/demo-11-zlib.orc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+
+	// Select a single column from the file.
+	c := r.Select("_col0")
+
+	// Call Stripes to trigger reading the first stripe.
+	var values []interface{}
+	c.Stripes()
+	for c.Next() {
+		vals := c.Row()
+		values = append(values, vals...)
+	}
+	if err := c.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Select a single column from the file.
+	c = r.Select("_col0")
+
+	// Call Stripes to trigger reading the first stripe.
+	var valuesAgain []interface{}
+	c.Stripes()
+	for c.Next() {
+		vals := c.Row()
+		valuesAgain = append(valuesAgain, vals...)
+	}
+	if err := c.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(values, valuesAgain) {
+		t.Errorf("Test failed, expected values to be equal")
 	}
 
 }

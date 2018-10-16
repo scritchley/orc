@@ -34,15 +34,12 @@ type Reader struct {
 	metadata                 *proto.Metadata
 	currentStripeOffset      int
 	currentStripeInformation *proto.StripeInformation
-	stripesLength            int
-	columns                  map[int]*proto.ColumnEncoding
 	schema                   *TypeDescription
 }
 
 func NewReader(r SizedReaderAt) (*Reader, error) {
 	reader := &Reader{
-		r:       r,
-		columns: make(map[int]*proto.ColumnEncoding),
+		r: r,
 	}
 	err := reader.extractMetaInfoFromFooter()
 	if err != nil {
@@ -168,106 +165,20 @@ func (r *Reader) extractMetaInfoFromFooter() error {
 
 }
 
-func (r *Reader) getStreams(included ...int) (streamMap, error) {
+func (r *Reader) getStripe(stripeNum int, included ...int) (*Stripe, error) {
 	stripes, err := r.getStripes()
 	if err != nil {
 		return nil, err
 	}
-
-	r.stripesLength = len(stripes)
-	if r.currentStripeOffset >= r.stripesLength {
+	if stripeNum >= len(stripes) {
 		return nil, io.EOF
 	}
-
-	r.currentStripeInformation = stripes[r.currentStripeOffset]
-	// Increment the currentStripeOffset so that the next call returns the next stripe.
-	r.currentStripeOffset++
-	// Unmarshal the stripe footer
-	stripeOffset := int64(r.currentStripeInformation.GetOffset())
-	stripeFooterOffset := stripeOffset + int64(r.currentStripeInformation.GetIndexLength()+r.currentStripeInformation.GetDataLength())
-	stripeFooterLength := int64(r.currentStripeInformation.GetFooterLength())
-	stripeFooterReader := io.NewSectionReader(r.r, stripeFooterOffset, stripeFooterLength)
-
-	codec, err := r.getCodec()
+	stripe := NewStripe(stripes[stripeNum], included...)
+	err = stripe.FromReader(r)
 	if err != nil {
 		return nil, err
 	}
-
-	// Decode the footer into a new byte slice.
-	stripeFooterDecoded := codec.Decoder(stripeFooterReader)
-	decodedStripeFooterBytes, err := ioutil.ReadAll(stripeFooterDecoded)
-	if err != nil {
-		return nil, err
-	}
-
-	// Unmarshal the footer and store against the reader.
-	stripeFooter := &proto.StripeFooter{}
-	err = gproto.Unmarshal(decodedStripeFooterBytes, stripeFooter)
-	if err != nil {
-		return nil, err
-	}
-
-	// Store the columns and their encoding types so that we can access them later.
-	columns := stripeFooter.GetColumns()
-	for i, column := range columns {
-		r.columns[i] = column
-	}
-
-	streamOffset := stripeOffset
-	streamsProto := stripeFooter.GetStreams()
-	streams := make(streamMap)
-
-	if len(streamsProto) == 0 {
-		return streams, io.EOF
-	}
-
-	// Iterate through the streams and allocate byte buffers for each.
-	for _, stream := range streamsProto {
-		// Get the columnID for the stream
-		columnID := int(stream.GetColumn())
-		// Determine the streams length
-		streamLength := int64(stream.GetLength())
-		// Determine if this stream should be included
-		var include bool
-		for i := range included {
-			if included[i] == columnID {
-				include = true
-			}
-		}
-		// Only allocate buffers for columns that we are planning to read.
-		if include {
-			// Create a new section reader for the length of the stream.
-			streamReader := io.NewSectionReader(r.r, streamOffset, streamLength)
-			// Retrieve the codec
-			codec, err := r.getCodec()
-			if err != nil {
-				return nil, err
-			}
-			dec := codec.Decoder(streamReader)
-			// Copy the stream into a buffer.
-			var streamBuf bytes.Buffer
-			_, err = io.Copy(&streamBuf, dec)
-			if err != nil {
-				return nil, err
-			}
-			// Store the byte buffer within the streamMap using a streamName.
-			name := streamName{
-				columnID: int(stream.GetColumn()),
-				kind:     stream.GetKind(),
-			}
-			streams.set(name, &streamBuf)
-		}
-		// Increment the streamOffset for the next stream.
-		streamOffset += streamLength
-	}
-	return streams, nil
-}
-
-func (r *Reader) getColumn(columnID int) (*proto.ColumnEncoding, error) {
-	if columnID > len(r.columns) || r.columns[columnID] == nil {
-		return nil, fmt.Errorf("column: %v does not exist", columnID)
-	}
-	return r.columns[columnID], nil
+	return stripe, nil
 }
 
 func (r *Reader) createSchema(types []*proto.Type, rootColumn int) (*TypeDescription, error) {
@@ -413,10 +324,6 @@ func (r *Reader) getStripes() ([]*proto.StripeInformation, error) {
 	return nil, errNoFooter
 }
 
-func (r *Reader) stripeRowCount() int {
-	return int(r.currentStripeInformation.GetNumberOfRows())
-}
-
 func (r *Reader) Close() error {
 	return nil
 }
@@ -424,4 +331,120 @@ func (r *Reader) Close() error {
 func (r *Reader) Select(fields ...string) *Cursor {
 	cursor := &Cursor{Reader: r}
 	return cursor.Select(fields...)
+}
+
+func (r *Reader) NumRows() int {
+	return int(r.footer.GetNumberOfRows())
+}
+
+type Stripe struct {
+	included []int
+	*proto.StripeInformation
+	columns map[int]*proto.ColumnEncoding
+	streamMap
+}
+
+func NewStripe(info *proto.StripeInformation, included ...int) *Stripe {
+	return &Stripe{
+		StripeInformation: info,
+		included:          included,
+		columns:           make(map[int]*proto.ColumnEncoding),
+		streamMap:         make(streamMap),
+	}
+}
+
+func (s *Stripe) FromReader(r *Reader) error {
+	if err := s.unmarshalStripeFooter(r); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Stripe) unmarshalStripeFooter(r *Reader) error {
+	// Unmarshal the stripe footer
+	stripeOffset := int64(s.GetOffset())
+	stripeFooterOffset := stripeOffset + int64(s.GetIndexLength()+s.GetDataLength())
+	stripeFooterLength := int64(s.GetFooterLength())
+	stripeFooterReader := io.NewSectionReader(r.r, stripeFooterOffset, stripeFooterLength)
+
+	codec, err := r.getCodec()
+	if err != nil {
+		return err
+	}
+
+	// Decode the footer into a new byte slice.
+	stripeFooterDecoded := codec.Decoder(stripeFooterReader)
+	decodedStripeFooterBytes, err := ioutil.ReadAll(stripeFooterDecoded)
+	if err != nil {
+		return err
+	}
+
+	// Unmarshal the footer and store against the reader.
+	stripeFooter := &proto.StripeFooter{}
+	err = gproto.Unmarshal(decodedStripeFooterBytes, stripeFooter)
+	if err != nil {
+		return err
+	}
+
+	// Store the columns and their encoding types so that we can access them later.
+	columns := stripeFooter.GetColumns()
+	for i, column := range columns {
+		s.columns[i] = column
+	}
+
+	streamOffset := stripeOffset
+	streamsProto := stripeFooter.GetStreams()
+
+	if len(streamsProto) == 0 {
+		return io.EOF
+	}
+
+	// Iterate through the streams and allocate byte buffers for each.
+	for _, stream := range streamsProto {
+		// Get the columnID for the stream
+		columnID := int(stream.GetColumn())
+		// Determine the streams length
+		streamLength := int64(stream.GetLength())
+		// Determine if this stream should be included
+		var include bool
+		for i := range s.included {
+			if s.included[i] == columnID {
+				include = true
+			}
+		}
+		// Only allocate buffers for columns that we are planning to read.
+		if include {
+			// Create a new section reader for the length of the stream.
+			streamReader := io.NewSectionReader(r.r, streamOffset, streamLength)
+			// Retrieve the codec
+			codec, err := r.getCodec()
+			if err != nil {
+				return err
+			}
+			dec := codec.Decoder(streamReader)
+			// Copy the stream into a buffer.
+			var streamBuf bytes.Buffer
+			_, err = io.Copy(&streamBuf, dec)
+			if err != nil {
+				return err
+			}
+			// Store the byte buffer within the streamMap using a streamName.
+			name := streamName{
+				columnID: int(stream.GetColumn()),
+				kind:     stream.GetKind(),
+			}
+			s.streamMap.set(name, &streamBuf)
+		}
+		// Increment the streamOffset for the next stream.
+		streamOffset += streamLength
+	}
+
+	return nil
+}
+
+func (s *Stripe) getColumn(columnID int) (*proto.ColumnEncoding, error) {
+	if columnID > len(s.columns) || s.columns[columnID] == nil {
+		return nil, fmt.Errorf("column: %v does not exist", columnID)
+	}
+	return s.columns[columnID], nil
 }
