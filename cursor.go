@@ -85,6 +85,10 @@ func (c *Cursor) Next() bool {
 
 // next returns true if all readers return that another row is available.
 func (c *Cursor) next() bool {
+	// If there is an error then return false.
+	if c.err != nil {
+		return false
+	}
 	// If there are no readers then return false.
 	if len(c.readers) == 0 {
 		return false
