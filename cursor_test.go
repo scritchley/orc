@@ -114,7 +114,7 @@ func TestCursorSelectError(t *testing.T) {
 		t.Errorf("Next returned true, expected false")
 	}
 	
-	err := c.Err()
+	err = c.Err()
 	if err == nil {
 		t.Errorf("Expected error")
 	}
