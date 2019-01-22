@@ -92,3 +92,35 @@ func TestCursorResets(t *testing.T) {
 	}
 
 }
+
+
+func TestCursorSelectError(t *testing.T) {
+
+	r, err := Open("./examples/demo-11-zlib.orc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+
+	// Try to select a column that doesn't exist.
+	c := r.Select("notfound")
+	
+	var hasNext bool
+	for c.Next() {
+		hasNext = true
+	}
+	
+	if hasNext {
+		t.Errorf("Next returned true, expected false")
+	}
+	
+	err = c.Err()
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+	if err.Error() != "no field with name: notfound" {
+		t.Errorf("Unexpected error: %s", err.Error())
+	}
+	
+	
+}
