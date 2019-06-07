@@ -60,13 +60,13 @@ func TestZigZagDecode(t *testing.T) {
 	}
 }
 
-func BenchmarkzigzagEncodeeger(b *testing.B) {
+func BenchmarkZigZagEncode(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		zigzagEncode(int64(i))
 	}
 }
 
-func BenchmarkzigzagDecodeeger(b *testing.B) {
+func BenchmarkZigZagDecode(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		zigzagDecode(uint64(i))
 	}
