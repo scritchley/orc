@@ -1,6 +1,8 @@
 package orc
 
 import (
+	"time"
+
 	"github.com/scritchley/orc/proto"
 )
 
@@ -14,6 +16,8 @@ func NewColumnStatistics(category Category) ColumnStatistics {
 		return NewStringStatistics()
 	case CategoryBoolean:
 		return NewBucketStatistics()
+	case CategoryTimestamp:
+		return NewTimestampStatistics()
 	default:
 		return NewBaseStatistics()
 	}
@@ -235,3 +239,71 @@ func NewBucketStatistics() *BucketStatistics {
 // 	}
 // 	b.BaseStatistics.Add(value)
 // }
+
+type TimestampStatistics struct {
+	BaseStatistics
+	minSet bool
+}
+
+func NewTimestampStatistics() *TimestampStatistics {
+	base := NewBaseStatistics()
+	var max, min, maxUTC, minUTC int64
+
+	base.TimestampStatistics = &proto.TimestampStatistics{
+		Maximum:    &max,
+		Minimum:    &min,
+		MaximumUtc: &maxUTC,
+		MinimumUtc: &minUTC,
+	}
+	return &TimestampStatistics{
+		BaseStatistics: base,
+	}
+}
+
+func (i *TimestampStatistics) Merge(other ColumnStatistics) {
+	if is, ok := other.(*TimestampStatistics); ok {
+		if is.TimestampStatistics.GetMaximum() > i.TimestampStatistics.GetMaximum() {
+			i.TimestampStatistics.Maximum = is.TimestampStatistics.Maximum
+			i.TimestampStatistics.MaximumUtc = is.TimestampStatistics.MaximumUtc
+		}
+		if is.TimestampStatistics.GetMinimum() < i.TimestampStatistics.GetMinimum() {
+			i.TimestampStatistics.Minimum = is.TimestampStatistics.Minimum
+			i.TimestampStatistics.MinimumUtc = is.TimestampStatistics.MinimumUtc
+		}
+		i.BaseStatistics.Merge(is.BaseStatistics)
+	}
+}
+
+func (i *TimestampStatistics) Add(value interface{}) {
+	if val, ok := value.(time.Time); ok {
+		if i.TimestampStatistics.Maximum == nil {
+			valCopy := val.Unix()
+			valUTCCopy := val.UTC().Unix()
+			i.TimestampStatistics.Maximum = &valCopy
+			i.TimestampStatistics.MaximumUtc = &valUTCCopy
+		} else if val.After(time.Unix(i.TimestampStatistics.GetMaximum(), 0)) {
+			*i.TimestampStatistics.Maximum = val.Unix()
+			*i.TimestampStatistics.MaximumUtc = val.UTC().Unix()
+		}
+		if !i.minSet {
+			valCopy := val.Unix()
+			valUTCCopy := val.UTC().Unix()
+			i.TimestampStatistics.Minimum = &valCopy
+			i.TimestampStatistics.MinimumUtc = &valUTCCopy
+			i.minSet = true
+		} else if val.Before(time.Unix(i.TimestampStatistics.GetMinimum(), 0)) {
+			*i.TimestampStatistics.Minimum = val.Unix()
+			*i.TimestampStatistics.MinimumUtc = val.UTC().Unix()
+
+		}
+	}
+	i.BaseStatistics.Add(value)
+}
+
+func (i *TimestampStatistics) Statistics() *proto.ColumnStatistics {
+	return i.ColumnStatistics
+}
+
+func (i *TimestampStatistics) Reset() {
+	*i = *NewTimestampStatistics()
+}
