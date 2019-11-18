@@ -144,7 +144,7 @@ func TestCursorGetStripe(t *testing.T) {
 	cols := r.Schema().Columns()
 	c := r.Select(cols...)
 
-	err = c.GetStripe(numStripes)
+	err = c.GetStripe(numStripes - 1)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
