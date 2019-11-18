@@ -69,6 +69,10 @@ func (r *Reader) Schema() *TypeDescription {
 	return r.schema
 }
 
+func (r *Reader) Metadata() *proto.Metadata {
+	return r.metadata
+}
+
 func (r *Reader) extractMetaInfoFromFooter() error {
 
 	size := int(r.r.Size())
