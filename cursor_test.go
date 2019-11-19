@@ -124,29 +124,29 @@ func TestCursorSelectError(t *testing.T) {
 
 }
 
-func TestCursorGetStripe(t *testing.T) {
+func TestCursorSelectStripe(t *testing.T) {
 	r, err := Open("./examples/demo-11-none.orc")
 	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+		t.Fatalf("Expected no error, got %v", err)
 	}
 
 	expectedStripes := 385
 
 	numStripes, err := r.NumStripes()
 	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+		t.Fatalf("Expected no error, got %v", err)
 	}
 
 	if numStripes != expectedStripes {
-		t.Fatalf("expected %d stripes, got %d", expectedStripes, numStripes)
+		t.Fatalf("Expected %d stripes, got %d", expectedStripes, numStripes)
 	}
 
 	cols := r.Schema().Columns()
 	c := r.Select(cols...)
 
-	err = c.GetStripe(numStripes - 1)
+	err = c.SelectStripe(numStripes - 1)
 	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+		t.Fatalf("Expected no error, got %v", err)
 	}
 
 	var row []interface{}
@@ -167,6 +167,6 @@ func TestCursorGetStripe(t *testing.T) {
 	}
 
 	if !cmp.Equal(expectedLastRow, row) {
-		t.Fatalf("expected %v, got %v", expectedLastRow, row)
+		t.Fatalf("Expected %v, got %v", expectedLastRow, row)
 	}
 }

@@ -43,17 +43,17 @@ func TestNumStripes(t *testing.T) {
 
 	r, err := Open("examples/demo-11-none.orc")
 	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+		t.Fatalf("Expected no error, got %v", err)
 	}
 
 	defer r.Close()
 
 	n, err := r.NumStripes()
 	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+		t.Fatalf("Expected no error, got %v", err)
 	}
 
 	if n != expectedStripes {
-		t.Fatalf("expected %d stripes, got %d", expectedStripes, n)
+		t.Fatalf("Expected %d stripes, got %d", expectedStripes, n)
 	}
 }
