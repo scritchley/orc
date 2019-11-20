@@ -46,7 +46,6 @@ func (c *Cursor) Select(fields ...string) *Cursor {
 
 // SelectStripe retrieves the stream information for the specified stripe.
 func (c *Cursor) SelectStripe(n int) error {
-	var err error
 	stripe, err := c.Reader.getStripe(n, c.included...)
 	if err != nil {
 		return err
