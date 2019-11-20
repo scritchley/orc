@@ -4,7 +4,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/scritchley/orc/proto"
 )
 
@@ -166,7 +165,13 @@ func TestCursorSelectStripe(t *testing.T) {
 		int64(6),
 	}
 
-	if !cmp.Equal(expectedLastRow, row) {
-		t.Fatalf("Expected %v, got %v", expectedLastRow, row)
+	if len(row) != len(expectedLastRow) {
+		t.Fatalf("Expected %d elements, got %d", len(expectedLastRow), len(row))
+	}
+
+	for idx, e := range expectedLastRow {
+		if e != row[idx] {
+			t.Fatalf("Expected %v, got %v", e, row[idx])
+		}
 	}
 }
