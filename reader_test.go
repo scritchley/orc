@@ -37,3 +37,23 @@ func TestReadNullAtEnd(t *testing.T) {
 		}
 	}
 }
+
+func TestNumStripes(t *testing.T) {
+	expectedStripes := 385
+
+	r, err := Open("examples/demo-11-none.orc")
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	defer r.Close()
+
+	n, err := r.NumStripes()
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if n != expectedStripes {
+		t.Fatalf("Expected %d stripes, got %d", expectedStripes, n)
+	}
+}
