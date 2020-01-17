@@ -93,7 +93,6 @@ func TestCursorResets(t *testing.T) {
 
 }
 
-
 func TestCursorSelectError(t *testing.T) {
 
 	r, err := Open("./examples/demo-11-zlib.orc")
@@ -104,16 +103,16 @@ func TestCursorSelectError(t *testing.T) {
 
 	// Try to select a column that doesn't exist.
 	c := r.Select("notfound")
-	
+
 	var hasNext bool
 	for c.Next() {
 		hasNext = true
 	}
-	
+
 	if hasNext {
 		t.Errorf("Next returned true, expected false")
 	}
-	
+
 	err = c.Err()
 	if err == nil {
 		t.Errorf("Expected error")
@@ -121,6 +120,58 @@ func TestCursorSelectError(t *testing.T) {
 	if err.Error() != "no field with name: notfound" {
 		t.Errorf("Unexpected error: %s", err.Error())
 	}
-	
-	
+
+}
+
+func TestCursorSelectStripe(t *testing.T) {
+	r, err := Open("./examples/demo-11-none.orc")
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	expectedStripes := 385
+
+	numStripes, err := r.NumStripes()
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if numStripes != expectedStripes {
+		t.Fatalf("Expected %d stripes, got %d", expectedStripes, numStripes)
+	}
+
+	cols := r.Schema().Columns()
+	c := r.Select(cols...)
+
+	err = c.SelectStripe(numStripes - 1)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	var row []interface{}
+	for c.Next() {
+		row = c.Row()
+	}
+
+	expectedLastRow := []interface{}{
+		int64(1920800),
+		"F",
+		"U",
+		"Unknown",
+		int64(10000),
+		"Unknown",
+		int64(6),
+		int64(6),
+		int64(6),
+	}
+
+	if len(row) != len(expectedLastRow) {
+		t.Fatalf("Expected %d elements, got %d", len(expectedLastRow), len(row))
+	}
+
+	for idx, e := range expectedLastRow {
+		if e != row[idx] {
+			t.Fatalf("Expected %v, got %v", e, row[idx])
+		}
+	}
 }

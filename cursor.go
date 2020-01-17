@@ -44,6 +44,17 @@ func (c *Cursor) Select(fields ...string) *Cursor {
 	return c
 }
 
+// SelectStripe retrieves the stream information for the specified stripe.
+func (c *Cursor) SelectStripe(n int) error {
+	stripe, err := c.Reader.getStripe(n, c.included...)
+	if err != nil {
+		return err
+	}
+	c.Stripe = stripe
+	c.stripeOffset = n
+	return c.prepareStreamReaders()
+}
+
 // prepareStreamReaders prepares TreeReaders for each of the columns
 // that will be read.
 func (c *Cursor) prepareStreamReaders() error {
@@ -65,10 +76,11 @@ func (c *Cursor) prepareNextStripe() error {
 	// and creating the required readers for each of the
 	// required columns.
 	var err error
-	c.Stripe, err = c.Reader.getStripe(c.stripeOffset, c.included...)
+	stripe, err := c.Reader.getStripe(c.stripeOffset, c.included...)
 	if err != nil {
 		return err
 	}
+	c.Stripe = stripe
 	c.stripeOffset++ // Increment in order to fetch the next stripe.
 	return c.prepareStreamReaders()
 }
