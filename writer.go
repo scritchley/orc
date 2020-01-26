@@ -3,10 +3,11 @@ package orc
 import (
 	"bytes"
 	"fmt"
+	"gitlab.myteksi.net/gophers/go/dispatcher/grab-x/commons/utils/math"
 	"io"
 
 	gproto "github.com/golang/protobuf/proto"
-	"github.com/scritchley/orc/proto"
+	"orc/proto"
 )
 
 var (
@@ -168,6 +169,64 @@ func (w *Writer) Write(values ...interface{}) error {
 			return w.writeStripe()
 		}
 	}
+
+	return nil
+}
+
+// ColumnIterator ...
+type ColumnIterator interface {
+	// Range iterates [from,until)
+	Range(from int, until  int, f func(int, interface{}))
+	// Count returns the total length of the column
+	Count() int
+}
+
+// WriteColumns writes stripes by columns
+func (w *Writer) WriteColumns(ColumnIterators []ColumnIterator) error {
+	delta := int(uint64(w.footer.GetRowIndexStride()) - w.totalRows%uint64(w.footer.GetRowIndexStride()))
+	from := 0
+	until := math.MinInt(
+		delta,
+		int(w.footer.GetRowIndexStride()),
+		ColumnIterators[0].Count(),
+	)
+
+	for {
+		if from >= ColumnIterators[0].Count() {
+			break
+		}
+
+		for i, col := range ColumnIterators {
+			colWriter := w.treeWriter.(*StructTreeWriter).children[i]
+			col.Range(from, until, func(_ int, v interface{}) {
+				_ = colWriter.Write(v)
+			})
+		}
+
+		w.totalRows += uint64(until-from)
+		w.stripeRows += uint64(until-from)
+
+		if w.totalRows%uint64(w.footer.GetRowIndexStride()) == 0 {
+			if err := w.flushWriters(); err != nil {
+				return err
+			}
+
+			if w.treeWriters.size() >= w.stripeTargetSize {
+				if err := w.writeStripe(); err != nil {
+					return err
+				}
+			}
+			if int64(w.stripeRows) >= w.stripeTargetRowCount {
+				if err := w.writeStripe(); err != nil {
+					return err
+				}
+			}
+		}
+
+		from = until
+		until += int(w.footer.GetRowIndexStride())
+	}
+
 	return nil
 }
 

@@ -435,3 +435,87 @@ func TestWriterWithNils(t *testing.T) {
 		t.Errorf("Test failed, expected %v, got %v", numValues, row)
 	}
 }
+
+type Column struct {
+	Data []interface{}
+}
+
+func (c *Column) Range(from int, until int, f func(int, interface{})) {
+	for i := from; i < until; i++ {
+		if i >= len(c.Data) {
+			break
+		}
+		f(i, c.Data[i])
+	}
+
+	return
+}
+
+func (c *Column) Count() int {
+	return len(c.Data)
+}
+
+func TestColumnWriters(t *testing.T) {
+	schema, err := ParseSchema("struct<col1:int,col2:string,col3:double>") // Only allows flat struct
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	buffer1 := &bytes.Buffer{}
+	writer, _ := NewWriter(buffer1, SetSchema(schema))
+	cols := []*Column{
+		{
+			Data: []interface{}{
+				1,
+				2,
+				3,
+			},
+		},
+		{
+			Data: []interface{}{
+				"a",
+				"b",
+				"c",
+			},
+		},
+		{
+			Data: []interface{}{
+				float64(1.0),
+				float64(2.0),
+				float64(3.0),
+			},
+		},
+	}
+
+	for j, _ := range cols[0].Data {
+		row := make([]interface{}, len(cols))
+
+		for i, _ := range cols {
+			row[i] = cols[i].Data[j]
+		}
+
+		if err := writer.Write(row...); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	iteratable := []ColumnIterator{cols[0],cols[1],cols[2]}
+	buffer2 := &bytes.Buffer{}
+	colWriter, _ := NewWriter(buffer2, SetSchema(schema))
+	if err := colWriter.WriteColumns(iteratable); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := colWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+
+	if !bytes.Equal(buffer1.Bytes(), buffer2.Bytes()) {
+		t.Error("Row Writer and Column Writer differ")
+	}
+}
