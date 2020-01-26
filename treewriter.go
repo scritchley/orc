@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/scritchley/orc/proto"
+	"orc/proto"
 )
 
 // TreeWriter is an interface for writing to a stream.

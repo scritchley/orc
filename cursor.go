@@ -7,7 +7,7 @@ import (
 
 	gproto "github.com/golang/protobuf/proto"
 
-	"github.com/scritchley/orc/proto"
+	"orc/proto"
 )
 
 // Cursor is used for iterating through the stripes and

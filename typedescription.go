@@ -7,7 +7,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/scritchley/orc/proto"
+	"orc/proto"
 )
 
 type Category struct {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/scritchley/orc/proto"
+	"orc/proto"
 )
 
 type streamMap map[streamName]io.Reader
