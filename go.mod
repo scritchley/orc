@@ -1,4 +1,4 @@
-module orc
+module github.com/crphang/orc
 
 require (
 	github.com/golang/protobuf v1.3.2

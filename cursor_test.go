@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"orc/proto"
+	"github.com/crphang/orc/proto"
 )
 
 func TestCursor(t *testing.T) {

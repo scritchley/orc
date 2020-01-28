@@ -9,7 +9,7 @@ import (
 
 	gproto "github.com/golang/protobuf/proto"
 
-	"orc/proto"
+	"github.com/crphang/orc/proto"
 )
 
 var (
