@@ -6,7 +6,7 @@ import (
 	"io"
 
 	gproto "github.com/golang/protobuf/proto"
-	"github.com/scritchley/orc/proto"
+	"orc/proto"
 )
 
 var (
@@ -168,6 +168,69 @@ func (w *Writer) Write(values ...interface{}) error {
 			return w.writeStripe()
 		}
 	}
+
+	return nil
+}
+
+// ColumnIterator ...
+type ColumnIterator interface {
+	// Range iterates [from,until)
+	Range(from int, until  int, f func(int, interface{}))
+	// Count returns the total length of the column
+	Count() int
+}
+
+// WriteColumns writes stripes by columns
+// Allows only non nested struct
+func (w *Writer) WriteColumns(ColumnIterators []ColumnIterator) error {
+	colLength := ColumnIterators[0].Count()
+	delta := int(uint64(w.footer.GetRowIndexStride()) - w.totalRows%uint64(w.footer.GetRowIndexStride()))
+	from := 0
+	until := minInt(
+		delta,
+		int(w.footer.GetRowIndexStride()),
+		colLength,
+	)
+
+	// Writes empty top level struct as we can assume it is non nil
+	for i:=0 ; i<colLength ; i++ {
+		_ = w.treeWriter.(*StructTreeWriter).BaseTreeWriter.Write(struct{}{})
+
+	}
+
+	for from < colLength {
+		for i, col := range ColumnIterators {
+			colWriter := w.treeWriter.(*StructTreeWriter).children[i]
+			col.Range(from, until, func(_ int, v interface{}) {
+				_ = colWriter.Write(v)
+			})
+		}
+
+		w.totalRows += uint64(until-from)
+		w.stripeRows += uint64(until-from)
+
+		if w.totalRows%uint64(w.footer.GetRowIndexStride()) == 0 {
+			if err := w.flushWriters(); err != nil {
+				return err
+			}
+
+			if w.treeWriters.size() >= w.stripeTargetSize {
+				if err := w.writeStripe(); err != nil {
+					return err
+				}
+			}
+			if int64(w.stripeRows) >= w.stripeTargetRowCount {
+				if err := w.writeStripe(); err != nil {
+					return err
+				}
+			}
+		}
+
+		from = until
+		remainder := colLength - until
+		until += minInt(remainder, int(w.footer.GetRowIndexStride()))
+	}
+
 	return nil
 }
 

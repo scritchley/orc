@@ -3,7 +3,7 @@ package orc
 import (
 	"fmt"
 
-	"github.com/scritchley/orc/proto"
+	"orc/proto"
 )
 
 func createTreeReader(schema *TypeDescription, s *Stripe) (TreeReader, error) {

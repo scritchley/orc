@@ -2,6 +2,7 @@ package orc
 
 import (
 	"io"
+	"math"
 )
 
 const (
@@ -1217,4 +1218,24 @@ func formatNanos(nanos int64) int64 {
 		}
 		return nanos<<3 | trailingZeros
 	}
+}
+
+func minInt(inputs ...int) int {
+	found := int64(math.MaxInt64)
+	for _, value := range inputs {
+		if int64(value) < found {
+			found = int64(value)
+		}
+	}
+	return int(found)
+}
+
+func maxInt(inputs ...int) int {
+	found := int64(math.MinInt64)
+	for _, value := range inputs {
+		if int64(value) > found {
+			found = int64(value)
+		}
+	}
+	return int(found)
 }
