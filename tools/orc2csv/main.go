@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"orc"
+	"github.com/crphang/orc"
 )
 
 var (

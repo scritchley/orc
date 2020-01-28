@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"time"
 
-	"orc/proto"
+	"github.com/crphang/orc/proto"
 )
 
 // TreeWriter is an interface for writing to a stream.

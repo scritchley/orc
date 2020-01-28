@@ -3,7 +3,7 @@ package orc
 import (
 	"time"
 
-	"orc/proto"
+	"github.com/crphang/orc/proto"
 )
 
 type statisticsMap map[int]ColumnStatistics
