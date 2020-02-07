@@ -224,7 +224,11 @@ type CompressionSnappy struct{}
 
 // Encoder implements the CompressionCodec interface. This is currently not implemented.
 func (c CompressionSnappy) Encoder(w io.Writer) io.WriteCloser {
-	return &CompressionSnappyEncoder{w}
+	return &CompressionSnappyEncoder{
+		destination: w,
+		compressedBuffer: &bytes.Buffer{},
+		rawBuffer: &bytes.Buffer{},
+	}
 }
 
 // Decoder implements the CompressionCodec interface.
@@ -284,19 +288,79 @@ func (c *CompressionSnappyDecoder) Read(p []byte) (int, error) {
 }
 
 type CompressionSnappyEncoder struct {
-	w io.Writer
+	destination      io.Writer
+	compressedBuffer *bytes.Buffer
+	rawBuffer        *bytes.Buffer
 }
 
 func (c *CompressionSnappyEncoder) Write(p []byte) (int, error) {
-	return 0, fmt.Errorf("Not implemented")
+	chunk := snappy.Encode(nil, p)
+
+	_, err := c.compressedBuffer.Write(chunk)
+	_, err = c.rawBuffer.Write(p)
+
+	return len(p), err
 }
 
 func (c *CompressionSnappyEncoder) Close() error {
-	return fmt.Errorf("Not implemented")
-}
+	defer func() {
+		c.rawBuffer.Reset()
+		c.rawBuffer = nil
+		c.compressedBuffer.Reset()
+		c.compressedBuffer = nil
+	}()
 
-func (c *CompressionSnappyEncoder) Flush() error {
-	return fmt.Errorf("Not implemented")
+	if c.compressedBuffer.Len() < c.rawBuffer.Len() {
+		//COMPRESSED
+		header, err := compressionHeader(c.compressedBuffer.Len(), false)
+		if err != nil {
+			return err
+		}
+		n, err := c.destination.Write(header)
+		if err != nil {
+			return err
+		}
+
+		if n != len(header) {
+			return fmt.Errorf("Expected to write %d bytes, wrote %d", len(header), n)
+		}
+
+		l := c.compressedBuffer.Len()
+		nCompressed, err := io.Copy(c.destination, c.compressedBuffer)
+		if err != nil {
+			return err
+		}
+
+		if int(nCompressed) != l {
+			return fmt.Errorf("Expected to write %d bytes, wrote %d", l, nCompressed)
+		}
+	} else {
+		//ORIGINAL
+		header, err := compressionHeader(c.rawBuffer.Len(), true)
+		if err != nil {
+			return err
+		}
+		n, err := c.destination.Write(header)
+		if err != nil {
+			return err
+		}
+
+		if n != len(header) {
+			return fmt.Errorf("Expected to write %d bytes, wrote %d", len(header), n)
+		}
+
+		l := c.rawBuffer.Len()
+		nRaw, err := io.Copy(c.destination, c.rawBuffer)
+		if err != nil {
+			return err
+		}
+
+		if int(nRaw) != l {
+			return fmt.Errorf("Expected to write %d bytes, wrote %d", l, nRaw)
+		}
+	}
+
+	return nil
 }
 
 func compressionHeader(chunkLength int, isOriginal bool) ([]byte, error) {

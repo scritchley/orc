@@ -70,9 +70,9 @@ func SetCompression(codec CompressionCodec) WriterConfigFunc {
 		switch codec.(type) {
 		case nil:
 		case CompressionNone:
-		case CompressionSnappy:
 			return fmt.Errorf("Unknown compression codec type %T", codec)
-			// w.postScript.Compression = proto.CompressionKind_SNAPPY.Enum()
+		case CompressionSnappy:
+			w.postScript.Compression = proto.CompressionKind_SNAPPY.Enum()
 		case CompressionZlib:
 			w.postScript.Compression = proto.CompressionKind_ZLIB.Enum()
 		default:
