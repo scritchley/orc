@@ -226,7 +226,6 @@ type CompressionSnappy struct{}
 func (c CompressionSnappy) Encoder(w io.Writer) io.WriteCloser {
 	return &CompressionSnappyEncoder{
 		destination: w,
-		compressedBuffer: &bytes.Buffer{},
 		rawBuffer: &bytes.Buffer{},
 	}
 }
@@ -289,30 +288,35 @@ func (c *CompressionSnappyDecoder) Read(p []byte) (int, error) {
 
 type CompressionSnappyEncoder struct {
 	destination      io.Writer
-	compressedBuffer *bytes.Buffer
 	rawBuffer        *bytes.Buffer
 }
 
 func (c *CompressionSnappyEncoder) Write(p []byte) (int, error) {
-	chunk := snappy.Encode(nil, p)
+	if c.rawBuffer == nil {
+		c.rawBuffer = &bytes.Buffer{}
+	}
 
-	_, err := c.compressedBuffer.Write(chunk)
-	_, err = c.rawBuffer.Write(p)
+	_, err := c.rawBuffer.Write(p)
 
 	return len(p), err
 }
 
 func (c *CompressionSnappyEncoder) Close() error {
+	if c.rawBuffer.Len() == 0 {
+		return nil
+	}
+
+	compressedChunk := snappy.Encode(nil, c.rawBuffer.Bytes())
+	compressedBuffer := bytes.NewBuffer(compressedChunk)
+
 	defer func() {
 		c.rawBuffer.Reset()
 		c.rawBuffer = nil
-		c.compressedBuffer.Reset()
-		c.compressedBuffer = nil
 	}()
 
-	if c.compressedBuffer.Len() < c.rawBuffer.Len() {
+	if compressedBuffer.Len() < c.rawBuffer.Len() {
 		//COMPRESSED
-		header, err := compressionHeader(c.compressedBuffer.Len(), false)
+		header, err := compressionHeader(compressedBuffer.Len(), false)
 		if err != nil {
 			return err
 		}
@@ -325,8 +329,8 @@ func (c *CompressionSnappyEncoder) Close() error {
 			return fmt.Errorf("Expected to write %d bytes, wrote %d", len(header), n)
 		}
 
-		l := c.compressedBuffer.Len()
-		nCompressed, err := io.Copy(c.destination, c.compressedBuffer)
+		l := compressedBuffer.Len()
+		nCompressed, err := io.Copy(c.destination, compressedBuffer)
 		if err != nil {
 			return err
 		}

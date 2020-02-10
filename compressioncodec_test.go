@@ -85,7 +85,7 @@ func TestCompressionZlib(t *testing.T) {
 func TestCompressionSnappy(t *testing.T) {
 	c := CompressionSnappy{}
 
-	buf := make([]byte, 1<<17)
+	buf := make([]byte, 1<<18)
 	_, err := rand.Read(buf)
 	if err != nil {
 		t.Fatal(err)
@@ -116,5 +116,38 @@ func TestCompressionSnappy(t *testing.T) {
 
 	if bytes.Compare(buf, got) != 0 {
 		t.Errorf("Input and output don't match: %v vs %v", buf, got)
+	}
+}
+
+func TestCompressionSnappy_HighEntropy(t *testing.T) {
+	c := CompressionSnappy{}
+
+	data := []byte("Ttttttttthis is aaaaaaaaaaaa highlyyy repeatttttted stringggggggggggg")
+
+	w := &bytes.Buffer{}
+	r := w
+
+	enc := c.Encoder(w)
+	dec := c.Decoder(r)
+
+	n, err := enc.Write(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != len(data) {
+		t.Errorf("Buffer underflow. Expected to write %d, wrote %d", len(data), n)
+	}
+	err = enc.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := ioutil.ReadAll(dec)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if bytes.Compare(data, got) != 0 {
+		t.Errorf("Input and output don't match: %v vs %v", data, got)
 	}
 }
