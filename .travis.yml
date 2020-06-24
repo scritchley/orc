@@ -1,8 +1,8 @@
 language: go
 
 go:
-  - 1.7
-  - 1.8
+  - 1.13
+  - 1.14
   - master
   
 go_import_path: github.com/scritchley/orc
