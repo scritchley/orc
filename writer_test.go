@@ -470,8 +470,8 @@ func TestBooleanWriterAlternating(t *testing.T) {
 			err = w.Write(nil)
 			expected[i] = nil
 		} else {
-			err = w.Write(true)
-			expected[i] = true
+			err = w.Write(false)
+			expected[i] = false
 		}
 		if err != nil {
 			t.Fatal(err)
