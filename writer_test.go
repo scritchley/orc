@@ -435,3 +435,82 @@ func TestWriterWithNils(t *testing.T) {
 		t.Errorf("Test failed, expected %v, got %v", numValues, row)
 	}
 }
+
+func TestBooleanWriterAlternating(t *testing.T) {
+	// Test was added to address issue: https://github.com/scritchley/orc/issues/61
+	// Involves writing alternative true, nil, false values to a boolean column.
+
+	f, err := ioutil.TempFile("", "testorc")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	filename := f.Name()
+	defer os.Remove(filename)
+	defer f.Close()
+
+	schema, err := ParseSchema("struct<boolean1:boolean>")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := NewWriter(f, SetSchema(schema))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	length := 20000
+	expected := make([]interface{}, length)
+
+	for i := 0; i < length; i++ {
+		if i%2 == 0 {
+			err = w.Write(true)
+			expected[i] = true
+
+		} else if i%3 == 0 {
+			err = w.Write(nil)
+			expected[i] = nil
+		} else {
+			err = w.Write(false)
+			expected[i] = false
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	err = w.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Read the writer output
+	r, err := Open(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c := r.Select("boolean1")
+	row := 0
+	got := make([]interface{}, length)
+	for c.Stripes() {
+		for c.Next() {
+			got[row] = c.Row()[0]
+			row++
+		}
+	}
+
+	if len(got) != len(expected) {
+		t.Errorf("Test failed, got length %v expected %v", len(got), len(expected))
+	}
+
+	if err := c.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := range expected {
+		if !reflect.DeepEqual(expected[i], got[i]) {
+			t.Errorf("Test failed for row %v, expected %v got %v", i, expected[i], got[i])
+		}
+	}
+
+}

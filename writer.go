@@ -158,9 +158,9 @@ func (w *Writer) Write(values ...interface{}) error {
 		return err
 	}
 	if w.totalRows%uint64(w.footer.GetRowIndexStride()) == 0 {
-		if err := w.flushWriters(); err != nil {
-			return err
-		}
+		// Records and resets indexes for each writer.
+		w.recordPositions()
+
 		if w.treeWriters.size() >= w.stripeTargetSize {
 			return w.writeStripe()
 		}
