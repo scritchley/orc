@@ -19,6 +19,8 @@ var (
 	DefaultStripeTargetSize int64 = 200 * 1024 * 1024
 	// DefaultStripeTargetRowCount is the number of rows over which a stripe should be written to the underlying file.
 	DefaultStripeTargetRowCount int64 = 1024 * 1024
+	// DefaultStripeWriterTimezone is the timezone that writer adds into the stripe footer.
+	DefaultStripeWriterTimezone string = "GMT"
 	// DefaultCompressionChunkSize is the default size of compression chunks within each stream.
 	DefaultCompressionChunkSize uint64 = 256 * 1024
 	// DefaultRowIndexStride is the default number of rows between indexes
@@ -415,8 +417,9 @@ func (w *Writer) writeStripe() error {
 
 	// Create a stripe footer and write it to the underlying writer.
 	stripeFooter := &proto.StripeFooter{
-		Streams: streams,
-		Columns: w.treeWriters.encodings(),
+		Streams:        streams,
+		Columns:        w.treeWriters.encodings(),
+		WriterTimezone: &DefaultStripeWriterTimezone,
 	}
 
 	byt, err := gproto.Marshal(stripeFooter)
