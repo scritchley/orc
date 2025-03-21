@@ -16,6 +16,7 @@ var (
 	errNoPostScript = errors.New("postscript is nil")
 	errNoFooter     = errors.New("footer is nil")
 	errNoTypes      = errors.New("no types")
+	errEmptyFile      = errors.New("the file is empty")
 )
 
 const (
@@ -76,6 +77,10 @@ func (r *Reader) Metadata() *proto.Metadata {
 func (r *Reader) extractMetaInfoFromFooter() error {
 
 	size := int(r.r.Size())
+	if size <= 0 {
+		return errEmptyFile
+	}
+	
 	psPlusByte := maxPostScriptSize + 1
 	if psPlusByte > size {
 		psPlusByte = size
